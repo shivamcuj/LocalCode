@@ -252,7 +252,9 @@ async function initializeLocalCode() {
   if (appInitialized) return;
   if (!window.pywebview || !window.pywebview.api) return;
   appInitialized = true;
-  await cmReady;
+  // Wire the UI and load the selected problem immediately. Do not wait for
+  // the optional CodeMirror CDN imports: a slow/offline network must never
+  // leave the problem statement and starter code blank.
   $("problemSelect").addEventListener("change", e => loadProblem(e.target.value));
   $("language").addEventListener("change", async e => {
     try {
@@ -275,6 +277,14 @@ async function initializeLocalCode() {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "Enter") { e.preventDefault(); runCode(true); }
   });
   await loadProblemList();
+
+  // If CM6 finishes loading after the fallback textarea has been displayed,
+  // upgrade the editor in-place while preserving the user's current code.
+  await cmReady;
+  if (cm && editor && currentMeta) {
+    const currentCode = editor.state.doc.toString();
+    createEditor(currentCode, selectedLanguage);
+  }
 }
 
 window.addEventListener("pywebviewready", initializeLocalCode);

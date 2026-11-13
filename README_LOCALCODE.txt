@@ -53,3 +53,12 @@ Troubleshooting update (v2.1):
 - If the editor does not load, close LocalCode and run run.bat again. The launcher verifies that webui\dist\app.js was built.
 - Starter code is loaded from the selected problem folder's starter.py, starter.cpp, or starter.js file.
 - Run tests the visible cases; Submit tests all cases. Ctrl+Enter runs and Ctrl+Shift+Enter submits.
+
+
+Startup fix notes (v2.3)
+-----------------------
+- The pywebview Window object is no longer attached to the JavaScript API object.
+  This avoids recursive inspection of native Windows accessibility properties.
+- The UI is served using pywebview's local HTTP server instead of file://.
+- Problem statements and starter code load before optional CodeMirror CDN imports
+  finish. If the network is unavailable, the fallback editor remains usable.
