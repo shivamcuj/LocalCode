@@ -80,3 +80,13 @@ Run sample count per problem with the optional top-level field:
 
 Allowed values are 2, 3, or 4. If fewer visible tests exist, Run uses all
 available visible tests. Submit always uses the complete test suite.
+
+
+RICH MARKDOWN + IMAGE PREVIEW (v2.6)
+-----------------------------------
+- Problem statements render Markdown headings, paragraphs, bold/italic text, inline code, fenced code blocks, lists, blockquotes, horizontal rules, and links.
+- Markdown images written as ![description](https://...) are displayed inline where they appear in problem.md. Remote HTTP/HTTPS images need an internet connection.
+- Local images are supported with relative paths, for example ![Example](images/example1.png). Put the image inside that problem's folder (usually an images/ subfolder). Local images are read through the Python API and embedded in the WebView, so they work offline.
+- Click any rendered image to open a larger preview. Press Escape or click outside the image to close it.
+- Local image paths are restricted to the selected problem folder; absolute paths and ../ traversal are rejected. Raw HTML in problem.md is escaped rather than executed.
+- If a local image is mentioned only as inline code (for example `attached-pattern-reference.png`), it will not display automatically. Add a Markdown image line such as ![Pattern reference](attached-pattern-reference.png).
