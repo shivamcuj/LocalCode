@@ -1,5 +1,7 @@
 """LocalCode desktop application powered by CodeMirror 6."""
+import base64
 import json
+import mimetypes
 import os
 import threading
 from pathlib import Path
@@ -90,6 +92,32 @@ class LocalCodeAPI:
                 "visible_count": visible_count, "total_count": len(meta["tests"]),
                 "run_test_count": run_test_count,
             }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def resolve_image(self, index, image_path):
+        """Return a safe local problem image as a data URL for the WebView."""
+        try:
+            i = int(index)
+            if i < 0 or i >= len(self.problems):
+                raise IndexError("Problem selection is out of range")
+            relative = str(image_path or "").strip().replace("\\", "/")
+            if not relative or relative.startswith(("/", "\\")):
+                raise ValueError("Image path must be relative to the problem folder")
+            # Do not allow remote URLs or traversal outside the selected problem.
+            if ":" in relative.split("/", 1)[0]:
+                raise ValueError("Only local relative image paths are accepted")
+            problem_dir = Path(self.problems[i]["dir"]).resolve()
+            image_file = (problem_dir / relative).resolve()
+            if image_file != problem_dir and problem_dir not in image_file.parents:
+                raise ValueError("Image path escapes the problem folder")
+            if not image_file.is_file():
+                raise FileNotFoundError(f"Image not found: {relative}")
+            mime = mimetypes.guess_type(image_file.name)[0] or "application/octet-stream"
+            if not mime.startswith("image/"):
+                raise ValueError("The referenced local file is not an image")
+            encoded = base64.b64encode(image_file.read_bytes()).decode("ascii")
+            return {"ok": True, "src": f"data:{mime};base64,{encoded}"}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 

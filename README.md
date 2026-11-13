@@ -1,68 +1,122 @@
-# LocalCode 2.5 (SRKCode UI)
+# LocalCode 2.6
 
 LocalCode is a **Windows desktop, offline-first LeetCode-style practice judge**. Pick a
 problem, write a solution in Python, C++ or JavaScript, and run it against local test
 files. There is no account, no server and no cloud judging.
 
-Version 2.5 restores the **Run vs Submit sample logic** and expands the problem set. The
-UI is also rebranded to **SRKCode** in the page title and header. Run is a fast feedback
-loop again (first 2–4 visible tests, default 3), while Submit evaluates the complete suite.
+Version 2.6 is a **problem-statement rendering release**. Rich Markdown is back, images in
+`problem.md` now render, and local images work without an internet connection because the
+Python side reads them and hands the WebView a base64 `data:` URL. Clicking an image opens
+a zoom preview.
 
-> Version strings are inconsistent in this release: the header badge still says **2.4**,
-> `README_LOCALCODE.txt` still has the "LOCALCODE WINDOWS 2.2" title, and the app window
-> title is still "LocalCode" while the in-page brand is "SRKCode".
+> The page title and header brand are **LocalCode** again and the badge reads **2.6**.
+> `README_LOCALCODE.txt` still has the "LOCALCODE WINDOWS 2.2" title even though it now
+> contains a "RICH MARKDOWN + IMAGE PREVIEW (v2.6)" section.
 
-## What's new in v2.5
+## What's new in v2.6
 
-### Run vs Submit
+### Rich Markdown
 
-- **Run uses sample tests only.** `app.py` now selects the first `run_test_count`
-  non-hidden tests (default **3**, clamped to **2–4**, then limited to the number of
-  visible tests). Submit still uses every test, including `"hidden": true` cases.
-- **Per-problem `run_test_count` is honored again.** `tests.json` may set it at the top
-  level. `001-two-sum` and `984-pattern4` now declare `"run_test_count": 3`.
-- **Clearer UI.** The editor bar shows `Run: N sample · Submit: M total tests`; verdicts
-  read `Running sample tests…` / `Submitting all tests…`, and the results line labels the
-  scope as `sample tests` or `total tests`.
-- **Empty-selection guard.** If an action has no tests to run (e.g. a problem with only
-  hidden tests), the backend returns
-  `This problem has no test cases available for this action.` instead of an empty result.
+`markdownToHtml()` in `webui/src/main.js` was rewritten as an async block parser with an
+inline tokenizer (`renderInline`). It now supports:
 
-### New and expanded content
+- Headings `#` through `######` (levels 1–6).
+- Paragraphs with proper joining across wrapped lines.
+- **Bold**, *italic* and `inline code`.
+- Fenced code blocks with an optional language, emitted as
+  `<pre><code class="language-…">` (the old renderer dropped the language).
+- Unordered lists with `-`, `*` or `+`, and ordered lists with `1.` / `1)` — emitted as
+  real `<ul>` / `<ol>` with `<li>` items. Consecutive items now stay in one list instead
+  of becoming one `div` per bullet.
+- Blockquotes (`>`), horizontal rules (`---`, `___`, `***`), and HTTP(S) links that open
+  in a new tab with `rel="noopener noreferrer"`.
+- Raw HTML in `problem.md` is **escaped**, not executed — only tags built by the renderer
+  reach the page.
 
-- **New problem `951-pattern-19`** (difficulty `Basic`):
-  - 100 tests, `output_mode: "stdout"`, `n` from 1 to 100.
-  - Includes a text version of the pattern for `n = 4` and `n = 2`.
-  - References two remote images and ships `attached-pattern-reference.png`, but the
-    Markdown renderer does **not** render images (see limitations).
-- **`838-linear-search` expanded**: 256 tests (up from 245), now including arrays up to
-  100,000 elements; `tests.json` is about 8 MB.
-- **`838` statement updated**: real constraints were added
-  (`1 <= nums.length <= 10^5`, `-10^4 <= nums[i], target <= 10^4`), replacing the old
-  "input assumption" note.
-- **`838` starter/solution cleaned up**: starter reformatted; the placeholder
-  `user_solution.cpp` no longer returns `true`.
+### Inline images
 
-### Branding and docs
+- **Remote images work.** `![alt](https://…)` is rendered as a `<figure class="md-image">`
+  with the image, alt text and a caption. This is what the two
+  `static.takeuforward.org` images in `951-pattern-19` needed.
+- **Local images work offline.** A relative target such as
+  `![Example](images/example1.png)` is sent to the new Python API, which returns the file
+  as a base64 data URL. No web server, no network, and the image travels with the problem
+  folder.
+- **Missing images degrade gracefully.** If the file cannot be resolved, the statement
+  shows `Image unavailable: …` inside `.md-image-missing` instead of a broken icon. If an
+  image element fails later while loading, an `error` handler swaps the figure for the
+  same placeholder.
+- **Images are constrained** by `max-width: 100%` and `max-height: 420px` inside the
+  statement, and are `loading="lazy"`.
 
-- Page `<title>` and header brand changed from **LocalCode** to **SRKCode** (the `LC`
-  brand mark and version badge remain).
-- `README_LOCALCODE.txt` gained a "RUN VS SUBMIT (v2.5)" section explaining
-  `run_test_count` and the 2/3/4 rules.
+### Click-to-zoom image preview
 
-## Fixed since v2.4
+- Any rendered statement image is clickable (`cursor: zoom-in`).
+- A full-screen `#imagePreview` overlay shows the enlarged image with a close button
+  (`×`).
+- The preview closes on the close button, a backdrop click, or **Escape**.
 
-| v2.4 problem | Status in v2.5 |
+### New Python API: `resolve_image`
+
+`app.py` gained:
+
+```python
+def resolve_image(self, index, image_path):
+    """Return a safe local problem image as a data URL for the WebView."""
+```
+
+It validates, in order:
+
+1. The problem index is an integer inside `self.problems`.
+2. The path is non-empty, is relative, and does not start with `/` or `\`.
+3. The first path segment contains no `:` — so `C:/…`, `https://…`, `data:…`,
+   `file:…` and `javascript:…` are rejected. Only local relative paths are accepted.
+4. The resolved path stays inside the selected problem folder — `../` escapes are
+   rejected via a `resolve()` + `parents` check.
+5. The target exists and is a file.
+6. `mimetypes` says the file is an `image/*` type.
+
+It then base64-encodes the file and returns `{"ok": true, "src": "data:image/png;base64,…"}`.
+Failures return `{"ok": false, "error": "…"}`, which the UI turns into the missing-image
+placeholder.
+
+### Branding
+
+- `<title>` and the header brand are **LocalCode** again (v2.5 had changed them to
+  `SRKCode`).
+- The version badge is **2.6**.
+- `style.css` gained the rich-Markdown rules, `.md-image`, `.md-image-missing` and the
+  `.image-preview` modal styles.
+
+## Fixed since v2.5
+
+| v2.5 problem | Status in v2.6 |
 | --- | --- |
-| Run executed every visible test, so 205–256-case problems were slow | **Fixed** — Run uses only 2–4 sample tests (default 3) |
-| `run_test_count` in `tests.json` was ignored | **Fixed** — parsed, clamped to 2–4, and limited to available visible tests |
-| UI did not say whether results covered samples or the full suite | **Fixed** — header, verdict and result labels show the scope |
-| An action with zero selected tests returned an empty/ambiguous result | **Fixed** — explicit `no test cases available` error |
-| `838-linear-search` shipped without constraints and with only small inputs | **Improved** — constraints documented and suite expanded to 256 tests up to 100k elements |
+| `951-pattern-19` remote images showed as literal Markdown text | **Fixed** — `![alt](https://…)` now renders |
+| Local images were never embedded or served, so they could not display | **Fixed** — `resolve_image` returns a data URL |
+| Markdown links were not rendered | **Fixed** — HTTP(S) links render with `target="_blank"` |
+| Ordered lists rendered as plain paragraphs | **Fixed** — real `<ol>` output |
+| Blockquotes and horizontal rules were unsupported | **Fixed** — `<blockquote>` and `<hr>` |
+| The click-to-zoom image modal was missing | **Fixed** — `#imagePreview` with button, backdrop and Escape |
+| Fenced code blocks lost their language | **Fixed** — `class="language-…"` is emitted |
+| Page title/brand said `SRKCode` while the rest of the app said LocalCode | **Fixed** — both are LocalCode now |
+| Badge still said `2.4` | **Fixed** — badge says `2.6` |
+| Raw HTML handling was line-based and could mis-parse inline Markdown | **Improved** — one tokenizer escapes everything it did not create |
 
-## Still broken or carried over from v2.4
+Verified directly:
 
-`engine.py` and `run.bat` are unchanged in v2.5.
+- `resolve_image(4, "attached-pattern-reference.png")` returns a ~39 KB
+  `data:image/png;base64,…` URL.
+- Missing files, `../001-two-sum/problem.md`, `images/../../001-two-sum/problem.md`,
+  `C:/Windows/win.ini`, `https://example.com/a.png` and an out-of-range index are all
+  rejected with distinct errors.
+- A Node harness confirmed the renderer output for headings, bold/italic, inline code,
+  links, `ul`/`ol`, blockquote, `hr`, fenced code with language, a remote image, a local
+  data-URL image, a missing image and escaped `<script>`.
+
+## Still broken or carried over from v2.5
+
+`engine.py` and `run.bat` are unchanged in v2.6.
 
 1. **C++ `vector<...>` types still fail.** `engine.ctype()` accepts only `int`, `long`,
    `double`, `bool`, `string` and `T[]`; `vector<int>` raises `KeyError`.
@@ -76,44 +130,59 @@ loop again (first 2–4 visible tests, default 3), while Submit evaluates the co
 2. **C++ standard headers are still emitted after user code.** `engine.py` writes
    `code + "\n" + CPP_HELP + main`. Consequences:
    - `695`, `702`, `838` starters fail with `'vector' has not been declared`.
-   - The new `951-pattern-19` C++ solution fails with `'cout' was not declared in this
-     scope` unless the user adds `#include <bits/stdc++.h>` at the top
-     (verified). Python and JavaScript work for these problems.
+   - `951-pattern-19`'s C++ solution fails with `'cout' was not declared in this scope`
+     unless `#include <bits/stdc++.h>` is added at the top (re-verified: it passes with
+     the include).
 
-3. **Markdown images are still not rendered.** `951-pattern-19/problem.md` uses remote
-   `![...](https://static.takeuforward.org/...)` images, which appear as literal Markdown
-   text. The bundled `attached-pattern-reference.png` is not referenced by an image tag,
-   so it is never displayed either. The local PNG is also not embedded or served.
+   Python and JavaScript work for these problems.
 
-4. **Rich Markdown is still limited.** Headings, paragraphs, bold/italic, inline code,
-   fenced code and simple bullets render. Links, images, ordered lists, blockquotes,
-   horizontal rules and the click-to-zoom image modal do not.
+3. **`951`'s bundled PNG still does not appear.** `attached-pattern-reference.png` is
+   only mentioned as `inline code` in the statement, and inline code is not an image.
+   Add a line such as
+   `![Pattern reference](attached-pattern-reference.png)` to display it. (The renderer and
+   API can serve the file — this is a content issue, not a code bug.)
 
-5. **The full editor still needs the network on every launch.** CodeMirror is imported
+4. **Markdown image URLs are parsed with `[^)]+`.** A target containing `)` or an optional
+   title (`![a](pic.png "caption")`) will not match, and falls back to escaped text.
+   Links have the same limitation.
+
+5. **No image limits or caching.** `resolve_image` reads and base64-encodes the file on
+   every render, with no size cap, no MIME allow-list beyond `image/*`, and no cache. A
+   very large PNG would inflate the DOM and memory.
+
+6. **Remote images are still fetched by the WebView.** HTTP(S) images bypass
+   `resolve_image` and load directly, so a `problem.md` can contact an external host
+   (offline users see the missing-image placeholder). Only *local* paths are restricted.
+
+7. **`returns` is still not validated for C++**, even though the error text mentions it.
+
+8. **The full editor still needs the network on every launch.** CodeMirror is imported
    from `https://esm.sh`; offline users get the plain textarea without highlighting,
    autocomplete, folding or Tab indentation.
 
-6. **`returns` is still not validated for C++**, even though the error text mentions it.
-
-7. **`webui/package.json` is dead weight.** Its CodeMirror dependencies and esbuild script
+9. **`webui/package.json` is dead weight.** Its CodeMirror dependencies and esbuild script
    are unused at runtime.
 
-8. **Version/branding strings disagree:** badge `2.4`, plain-text title `2.2`, window
-   title `LocalCode`, in-page brand `SRKCode`, brand mark `LC`.
+10. **`README_LOCALCODE.txt` title still says 2.2.** Its body now has v2.3, v2.4, v2.5 and
+    v2.6 sections.
 
-9. **The editor upgrade still replays unconditionally** after `cmReady`, discarding cursor
-   position and undo history and potentially showing the fallback toast twice.
+11. **The editor upgrade still replays unconditionally** after `cmReady`, discarding cursor
+    position and undo history and potentially showing the fallback toast twice.
 
-10. **`os.chdir(ROOT)` is process-wide.** Harmless today because the judge uses temporary
+12. **`os.chdir(ROOT)` is process-wide.** Harmless today because the judge uses temporary
     directories and absolute problem paths, but fragile for future relative paths.
 
-11. **Large test files.** `838` is about 8 MB with 256 tests and `951` about 2.7 MB with
-    100 tests. Run is fast now, but **Submit** still launches the whole suite (and for C++
-    one executable invocation per case), so it can take noticeably longer.
+13. **Large test files.** `838-linear-search` is about 8 MB (256 tests, arrays up to
+    100,000 elements) and `951-pattern-19` about 2.7 MB (100 tests). Run uses samples, but
+    **Submit** still runs the whole suite (one C++ process per case), so it can take a
+    while.
 
-12. **`run_test_count` can display values below 2.** The backend clamps to 2–4 and then
-    takes `min(..., visible_count)`, so a problem with one visible test shows
+14. **`run_test_count` can display values below 2.** The backend clamps to 2–4 and then
+    takes `min(…, visible_count)`, so a problem with one visible test shows
     `Run: 1 sample`, which contradicts the documented 2–4 range.
+
+15. **`__pycache__/` is untracked noise.** Importing `app.py` during testing created it and
+    there is still no root `.gitignore`.
 
 ## Still open from earlier versions
 
@@ -140,7 +209,7 @@ loop again (first 2–4 visible tests, default 3), while Submit evaluates the co
 - **g++** (MSYS2 UCRT64 recommended) — only for C++ judging.
 - **Node.js LTS** — only for JavaScript judging (not required to launch).
 - **Internet access** for the full CodeMirror editor. Without it, LocalCode uses the
-  textarea fallback.
+  textarea fallback. (Problem images can still work offline when they are local files.)
 
 ## Quick start
 
@@ -152,6 +221,7 @@ loop again (first 2–4 visible tests, default 3), while Submit evaluates the co
    - It starts `app.py`.
 3. Select a problem, choose a language, write code, then **Run** (samples) or **Submit**
    (all tests).
+4. Click any image in the statement to enlarge it; press Escape to close.
 
 Manual start:
 
@@ -167,18 +237,18 @@ HTTP server rather than from `file://`.
 
 ```text
 LocalCode/
-  app.py                  # pywebview shell, HTTP-served UI, Run/Submit sample logic
+  app.py                  # pywebview shell, HTTP-served UI, Run/Submit, resolve_image
   engine.py               # judge: Python/JS runners, C++ codegen, compile & execute
   requirements.txt        # pywebview>=5.4,<7
   run.bat                 # Python check, optional Node warning, pywebview install, launch
   build_exe.bat           # placeholder (no EXE build)
   README.md               # this file
-  README_LOCALCODE.txt    # plain-text 2.2 notes + v2.3/v2.4/v2.5 sections
+  README_LOCALCODE.txt    # plain-text 2.2 notes + v2.3–v2.6 sections
   README_GCC_FIX.txt      # MSYS2 GCC runtime-DLL note
   webui/
-    index.html            # app shell (SRKCode); loads src/main.js
-    style.css             # dark theme, markdown styles, .fallback-editor
-    src/main.js           # UI logic, markdown renderer, CDN CodeMirror loader/fallback
+    index.html            # app shell (LocalCode); image-preview modal
+    style.css             # dark theme, rich-Markdown, image and preview styles
+    src/main.js           # UI logic, Markdown renderer, image resolution, CDN loader
     package.json          # vestigial CodeMirror deps + unused esbuild script
     .gitignore            # node_modules/
   problems/
@@ -186,7 +256,7 @@ LocalCode/
     695-second-largest-element/   # 239 tests; C++ currently broken
     702-largest-element/          # 205 tests; C++ currently broken
     838-linear-search/            # 256 tests up to 100k elements; C++ broken
-    951-pattern-19/               # 100 stdout tests; images not rendered
+    951-pattern-19/               # 100 stdout tests; remote + local images
     984-pattern4/                 # 9 stdout tests; run_test_count 3
 ```
 
@@ -203,7 +273,8 @@ problems/
     starter.py            # optional
     starter.cpp           # optional
     starter.js            # optional
-    images/               # optional (not rendered by the current UI)
+    attached.png          # optional; reference as ![alt](attached.png)
+    images/               # optional; reference as ![alt](images/example.png)
 ```
 
 ### `tests.json`
@@ -251,7 +322,7 @@ Example:
 }
 ```
 
-### C++ types accepted in v2.5
+### C++ types accepted in v2.6
 
 | JSON type | C++ type     |
 | --------- | ------------ |
@@ -282,10 +353,33 @@ or similar without their own include do not compile. Add
 
 ### Markdown in `problem.md`
 
-Supported: headings (`#`, `##`, `###`), paragraphs, **bold**, *italic*, inline code,
-fenced code blocks and simple `-`/`*` bullet lines. Links, images, blockquotes, ordered
-lists and horizontal rules are **not** rendered. Raw HTML is escaped. This is why the new
-`951-pattern-19` images are not visible.
+Supported in v2.6:
+
+| Syntax | Result |
+| --- | --- |
+| `# …` … `###### …` | `<h1>` … `<h6>` |
+| Blank-line-separated text | `<p>` (wrapped lines are joined) |
+| `**bold**`, `*italic*`, `` `code` `` | `<strong>`, `<em>`, `<code>` |
+| ` ```lang ` fences | `<pre><code class="language-lang">` |
+| `-`, `*`, `+` items | `<ul><li>` |
+| `1.`, `1)` items | `<ol><li>` |
+| `> quote` | `<blockquote>` |
+| `---`, `___`, `***` | `<hr>` |
+| `[label](https://…)` | link, opens in a new tab |
+| `![alt](https://…)` | remote image + caption |
+| `![alt](relative/path.png)` | local image via `resolve_image`, offline |
+| Anything else / raw HTML | escaped text |
+
+Known gaps: image/link targets containing `)` and optional titles
+(`![a](pic.png "caption")`) are not parsed; unmatched syntax is shown as text.
+
+Local image rules:
+
+- The path is relative to the **selected problem folder**.
+- `images/…` subfolders are fine.
+- Absolute paths, `../` traversal, `file:`/`data:`/`javascript:` and remote URLs are
+  rejected with an error message.
+- Only files whose MIME type is `image/*` are served.
 
 ## How the judge works
 
@@ -311,12 +405,17 @@ Every Run/Submit:
 Verdicts: `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`,
 `Execution Error` (setup/compile failure).
 
-## Known issues and limitations (v2.5)
+## Known issues and limitations (v2.6)
 
 - **C++ is broken for `695`, `702`, `838`, and awkward for `951`** because of the missing
   vector types and the header ordering. Use Python/JavaScript, or add
   `#include <bits/stdc++.h>` yourself where possible.
-- **Images in problem statements are not displayed**, including the new `951` references.
+- **`951`'s bundled PNG is not shown** until the statement uses a Markdown image tag.
+- **Markdown image/link URLs cannot contain `)` or titles.**
+- **Local images are re-read and base64-encoded on every statement load**; there is no
+  size limit or cache.
+- **Remote images are fetched by the WebView**, so a statement can contact an external
+  host.
 - **Full editor requires internet.** Without `esm.sh`, the textarea fallback is used.
 - **Submit can be slow** on `838` (256 cases, up to 100k-element arrays) and `951`
   (100 cases), especially in C++.
@@ -326,16 +425,18 @@ Verdicts: `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`,
 - **`run.bat` does not enforce `pywebview>=5.4`.** It only checks that `webview` imports.
 - **`build_exe.bat` is a placeholder.** Use `run.bat` from the source folder.
 - **No root `.gitignore`** for generated files.
-- **Version/brand strings are inconsistent** (badge 2.4, title 2.2, `LocalCode` window vs
-  `SRKCode` page).
+- **Plain-text title still says 2.2.**
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
+| An image in the statement shows `Image unavailable: …` | The file is missing, is outside the problem folder, or is not an `image/*` type. Check the path is relative to that problem folder. |
+| A remote image does not load | No internet, or the host is blocked. Remote images are fetched by the WebView. |
+| `951`'s reference PNG is not displayed | It is only mentioned as inline code. Add `![Pattern reference](attached-pattern-reference.png)` to `problem.md`. |
+| `![a](pic.png "caption")` shows as text | Image URLs with titles or `)` are not parsed. Use a plain path. |
 | Run shows only 2–4 cases | Expected: Run uses sample tests. Use Submit for the full suite. |
 | Run says `no test cases available for this action` | The problem has no visible tests. Submit runs hidden tests. |
-| Images in `951-pattern-19` show as Markdown text | Image rendering is not implemented in the Markdown renderer. Use the text pattern in the statement. |
 | C++: `Runner failed: 'vector<int>'` | `ctype()` does not support `vector<int>`. Use `int[]` in `types` **and** add `#include <bits/stdc++.h>` to your code. |
 | C++: `'vector' has not been declared` / `'cout' was not declared` | Headers are emitted after user code. Add the include at the top of your solution. |
 | Editor is a plain textarea | CodeMirror could not be fetched from `esm.sh` (offline, proxy, DNS). The toast explains the reason. |
@@ -352,11 +453,16 @@ Verdicts: `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`,
 
 ## Version history (this branch)
 
+- **v2.6** — restores rich Markdown (headings 1–6, lists, blockquotes, rules, links,
+  fenced-code languages), renders remote and local images, adds the
+  `resolve_image` Python API with path/MIME validation and base64 data URLs, adds a
+  click-to-zoom image modal, degrades missing images gracefully, and puts the
+  **LocalCode** brand back with a **2.6** badge. C++ vector types and header ordering
+  remain broken.
 - **v2.5** — restores Run-vs-Submit sample logic (`run_test_count`, default 3, clamp 2–4),
   adds scope labels and an empty-test guard, adds `951-pattern-19` (100 stdout tests),
   expands `838-linear-search` to 256 tests with documented constraints, and rebrands the
-  page to **SRKCode**. C++ vector types/header ordering, Markdown images and other older
-  issues remain.
+  page to `SRKCode`.
 - **v2.4** — fixes CodeMirror `indentOnInput` registration and adds a resilient textarea
   fallback for CDN and constructor failures.
 - **v2.3** — removes the `Window` reference from the JS API, serves the UI through

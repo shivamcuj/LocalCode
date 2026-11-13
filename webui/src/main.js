@@ -41,29 +41,121 @@ function escapeHtml(value) {
   })[ch]);
 }
 
-function markdownToHtml(md) {
-  const lines = String(md || "").split(/\r?\n/);
-  let html = "", inCode = false, code = [];
+async function markdownToHtml(md, problemIndex) {
+  const lines = String(md || "").replace(/\r\n?/g, "\n").split("\n");
+  const blocks = [];
+  let paragraph = [], code = [], inCode = false, codeLang = "", listType = null;
+
+  const flushParagraph = async () => {
+    if (paragraph.length) {
+      blocks.push(`<p>${await renderInline(paragraph.join(" "), problemIndex)}</p>`);
+      paragraph = [];
+    }
+  };
+  const closeList = () => {
+    if (listType) { blocks.push(`</${listType}>`); listType = null; }
+  };
+
   for (const line of lines) {
-    if (line.trim().startsWith("```")) {
-      if (!inCode) { inCode = true; code = []; }
-      else { html += `<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`; inCode = false; }
+    const fence = line.match(/^\s*```\s*([\w+-]*)\s*$/);
+    if (fence) {
+      if (!inCode) {
+        await flushParagraph(); closeList();
+        inCode = true; code = []; codeLang = fence[1];
+      } else {
+        blocks.push(`<pre><code class="language-${escapeHtml(codeLang)}">${escapeHtml(code.join("\n"))}</code></pre>`);
+        inCode = false; code = []; codeLang = "";
+      }
       continue;
     }
     if (inCode) { code.push(line); continue; }
-    if (!line.trim()) { html += "<div class='md-gap'></div>"; continue; }
-    const inline = escapeHtml(line)
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>");
-    if (/^###\s/.test(line)) html += `<h3>${inline.replace(/^###\s/, "")}</h3>`;
-    else if (/^##\s/.test(line)) html += `<h2>${inline.replace(/^##\s/, "")}</h2>`;
-    else if (/^#\s/.test(line)) html += `<h1>${inline.replace(/^#\s/, "")}</h1>`;
-    else if (/^\s*[-*]\s/.test(line)) html += `<div class='md-list'>• ${inline.replace(/^\s*[-*]\s/, "")}</div>`;
-    else html += `<p>${inline}</p>`;
+    if (!line.trim()) { await flushParagraph(); closeList(); continue; }
+    if (/^\s*(---+|___+|\*\*\*+)\s*$/.test(line)) { await flushParagraph(); closeList(); blocks.push("<hr>"); continue; }
+    const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      await flushParagraph(); closeList();
+      const level = heading[1].length;
+      blocks.push(`<h${level}>${await renderInline(heading[2], problemIndex)}</h${level}>`);
+      continue;
+    }
+    const quote = line.match(/^\s*>\s?(.*)$/);
+    if (quote) { await flushParagraph(); closeList(); blocks.push(`<blockquote>${await renderInline(quote[1], problemIndex)}</blockquote>`); continue; }
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      await flushParagraph();
+      const wanted = unordered ? "ul" : "ol";
+      if (listType !== wanted) { closeList(); listType = wanted; blocks.push(`<${wanted}>`); }
+      blocks.push(`<li>${await renderInline((unordered || ordered)[1], problemIndex)}</li>`);
+      continue;
+    }
+    closeList();
+    paragraph.push(line.trim());
   }
-  if (inCode) html += `<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`;
+  await flushParagraph(); closeList();
+  if (inCode) blocks.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+  return blocks.join("\n");
+}
+
+async function renderInline(source, problemIndex) {
+  // Only emit tags created here. Raw HTML in problem.md is escaped by default.
+  const tokenPattern = /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\*\*(.+?)\*\*|\*(.+?)\*)/g;
+  let html = "", last = 0, match;
+  while ((match = tokenPattern.exec(source)) !== null) {
+    html += escapeHtml(source.slice(last, match.index));
+    if (match[1]?.startsWith("![")) {
+      const alt = match[2] || "Problem illustration";
+      const target = match[3].trim();
+      let src = "";
+      if (/^https?:\/\//i.test(target)) {
+        src = target;
+      } else if (!/^(?:data|javascript|file):/i.test(target) && !target.startsWith("//")) {
+        const resolved = await window.pywebview.api.resolve_image(problemIndex, target);
+        if (resolved?.ok) src = resolved.src;
+      }
+      if (src) {
+        const safeSrc = escapeHtml(src);
+        html += `<figure class="md-image"><img src="${safeSrc}" alt="${escapeHtml(alt)}" loading="lazy" data-preview-image="1"><figcaption>${escapeHtml(alt)}</figcaption></figure>`;
+      } else {
+        html += `<div class="md-image-missing">Image unavailable: ${escapeHtml(alt)} (${escapeHtml(target)})</div>`;
+      }
+    } else if (match[4]) {
+      const label = match[4], target = match[5].trim();
+      if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+      else html += escapeHtml(label);
+    } else if (match[6]) html += `<code>${escapeHtml(match[6])}</code>`;
+    else if (match[7]) html += `<strong>${escapeHtml(match[7])}</strong>`;
+    else if (match[8]) html += `<em>${escapeHtml(match[8])}</em>`;
+    last = tokenPattern.lastIndex;
+  }
+  html += escapeHtml(source.slice(last));
   return html;
+}
+
+function wireImagePreviews() {
+  document.querySelectorAll("#statement img[data-preview-image]").forEach(img => {
+    img.addEventListener("click", () => {
+      const modal = $("imagePreview");
+      const preview = $("imagePreviewImg");
+      preview.src = img.src;
+      preview.alt = img.alt || "Image preview";
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    });
+    img.addEventListener("error", () => {
+      const fallback = document.createElement("div");
+      fallback.className = "md-image-missing";
+      fallback.textContent = `Could not load image: ${img.alt || img.src}`;
+      img.closest("figure")?.replaceWith(fallback);
+    }, { once: true });
+  });
+}
+
+function closeImagePreview() {
+  const modal = $("imagePreview");
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  $("imagePreviewImg").src = "";
 }
 
 function languageMode(language) {
@@ -149,7 +241,8 @@ async function loadProblem(index, keepLanguage = true) {
     $("problemTitle").textContent = `${data.id}. ${data.title}`;
     $("difficulty").textContent = data.difficulty || "";
     $("difficulty").className = `difficulty ${(data.difficulty || "").toLowerCase()}`;
-    $("statement").innerHTML = markdownToHtml(data.statement);
+    $("statement").innerHTML = await markdownToHtml(data.statement, selectedProblem);
+    wireImagePreviews();
     $("caseCount").textContent = `Run: ${data.run_test_count} sample · Submit: ${data.total_count} total tests`;
     createEditor(data.code || "", language);
     clearResults();
@@ -278,6 +371,9 @@ async function initializeLocalCode() {
   $("runBtn").addEventListener("click", () => runCode(false));
   $("submitBtn").addEventListener("click", () => runCode(true));
   $("refreshBtn").addEventListener("click", loadProblemList);
+  $("imagePreviewClose").addEventListener("click", closeImagePreview);
+  $("imagePreview").addEventListener("click", e => { if (e.target === $("imagePreview")) closeImagePreview(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeImagePreview(); });
   $("openFolderBtn").addEventListener("click", async () => {
     try {
       const result = await window.pywebview.api.open_problems_folder();
