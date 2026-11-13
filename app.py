@@ -75,12 +75,20 @@ class LocalCodeAPI:
                 starter = Path(meta["dir"]) / LANGS[language][1]
                 code = starter.read_text(encoding="utf8") if starter.is_file() else engine.DEFAULT[language]
             visible_count = sum(1 for t in meta["tests"] if not t.get("hidden"))
+            configured_run_count = meta.get("run_test_count", 3)
+            try:
+                configured_run_count = int(configured_run_count)
+            except (TypeError, ValueError):
+                configured_run_count = 3
+            run_test_count = min(4, max(2, configured_run_count))
+            run_test_count = min(run_test_count, visible_count)
             return {
                 "ok": True, "index": i, "id": meta["id"], "title": meta["title"],
                 "difficulty": meta.get("difficulty", ""),
                 "statement": (Path(meta["dir"]) / "problem.md").read_text(encoding="utf8"),
                 "code": code, "language": language,
                 "visible_count": visible_count, "total_count": len(meta["tests"]),
+                "run_test_count": run_test_count,
             }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
@@ -104,7 +112,21 @@ class LocalCodeAPI:
             self.drafts[(meta["dir"], language)] = code
             ext = LANGS[language][2]
             (Path(meta["dir"]) / f"user_solution.{ext}").write_text(code, encoding="utf8")
-            tests = [t for t in meta["tests"] if submit or not t.get("hidden")]
+            # Run is a fast feedback loop: use only the first 2-4 non-hidden
+            # sample tests. Submit always evaluates the complete suite, including
+            # hidden tests. `run_test_count` is configurable in each tests.json.
+            visible_tests = [t for t in meta["tests"] if not t.get("hidden")]
+            if submit:
+                tests = list(meta["tests"])
+            else:
+                try:
+                    sample_count = int(meta.get("run_test_count", 3))
+                except (TypeError, ValueError):
+                    sample_count = 3
+                sample_count = min(4, max(2, sample_count))
+                tests = visible_tests[:sample_count]
+            if not tests:
+                return {"ok": False, "error": "This problem has no test cases available for this action."}
             out = engine.judge(language, code, meta, tests)
             if out.get("tle"):
                 return {"ok": True, "verdict": "Time Limit Exceeded", "passed": 0,
@@ -136,6 +158,7 @@ class LocalCodeAPI:
             if passed == len(tests) and len(rows) == len(tests):
                 verdict = "Accepted"
             return {"ok": True, "verdict": verdict, "passed": passed, "total": len(tests),
+                    "test_mode": "all" if submit else "sample",
                     "ms": round(sum(r.get("ms", 0) for r in rows), 2), "results": rows}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
