@@ -1,0 +1,1 @@
+class Solution { twoSum(nums,target) { const seen=new Map(); for(let i=0;i<nums.length;i++){const x=nums[i]; if(seen.has(target-x)) return [seen.get(target-x),i]; seen.set(x,i);} } }
