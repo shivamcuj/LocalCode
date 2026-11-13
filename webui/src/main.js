@@ -150,7 +150,7 @@ async function loadProblem(index, keepLanguage = true) {
     $("difficulty").textContent = data.difficulty || "";
     $("difficulty").className = `difficulty ${(data.difficulty || "").toLowerCase()}`;
     $("statement").innerHTML = markdownToHtml(data.statement);
-    $("caseCount").textContent = `${data.visible_count} visible · ${data.total_count} total tests`;
+    $("caseCount").textContent = `Run: ${data.run_test_count} sample · Submit: ${data.total_count} total tests`;
     createEditor(data.code || "", language);
     clearResults();
   } catch (error) {
@@ -219,7 +219,7 @@ async function runCode(submit) {
   if (!editor || !currentMeta) return;
   const runBtn = $("runBtn"), submitBtn = $("submitBtn");
   runBtn.disabled = submitBtn.disabled = true;
-  $("verdict").textContent = submit ? "Submitting…" : "Running…";
+  $("verdict").textContent = submit ? "Submitting all tests…" : "Running sample tests…";
   $("verdict").className = "verdict neutral";
   $("resultMeta").textContent = "Executing your solution…";
   $("resultsBody").innerHTML = "<tr><td colspan='5' class='empty'>Running test cases…</td></tr>";
@@ -236,7 +236,8 @@ async function runCode(submit) {
     }
     $("verdict").textContent = response.verdict;
     $("verdict").className = `verdict ${response.verdict === "Accepted" ? "good" : "bad"}`;
-    $("resultMeta").textContent = `${response.passed}/${response.total} cases passed · ${response.ms ?? 0} ms`;
+    const scopeLabel = response.test_mode === "all" ? "total tests" : "sample tests";
+    $("resultMeta").textContent = `${response.passed}/${response.total} ${scopeLabel} passed · ${response.ms ?? 0} ms`;
     const body = $("resultsBody");
     body.innerHTML = "";
     response.results.forEach((row, index) => {

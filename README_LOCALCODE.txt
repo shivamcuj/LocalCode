@@ -68,3 +68,15 @@ VERSION 2.4 FIX
 - Corrected CodeMirror 6 indentOnInput extension registration.
 - This resolves the "Unrecognized extension value in extension set" error that prevented problem loading.
 - If CodeMirror initialization fails for another reason, the app now falls back to a basic editor instead of blocking problem loading.
+
+
+RUN VS SUBMIT (v2.5)
+-------------------
+Run executes only the first 3 non-hidden sample tests by default. Submit executes
+every test in tests.json, including tests marked hidden. You can configure the
+Run sample count per problem with the optional top-level field:
+
+    "run_test_count": 3
+
+Allowed values are 2, 3, or 4. If fewer visible tests exist, Run uses all
+available visible tests. Submit always uses the complete test suite.

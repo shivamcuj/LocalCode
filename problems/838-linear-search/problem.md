@@ -32,6 +32,12 @@ nums = [2, -4, 4, 0, 10], target = 6
 
 **Explanation:** The value 6 does not occur in the array, hence the output is -1.
 
+## Constraints
+
+- `1 <= nums.length <= 10^5`
+- `-10^4 <= nums[i] <= 10^4`
+- `-10^4 <= target <= 10^4`
+
 ## Function Signature
 
 Implement the following method and return the smallest index containing `target`, or `-1` if it is absent:
@@ -39,7 +45,3 @@ Implement the following method and return the smallest index containing `target`
 - **C++:** `int linearSearch(vector<int>& nums, int target)`
 - **JavaScript:** `linearSearch(nums, target)`
 - **Python:** `linearSearch(nums, target)`
-
-## Input Assumption
-
-The supplied statement does not specify array-length or integer-value constraints. The test cases use non-empty arrays and integer values.
