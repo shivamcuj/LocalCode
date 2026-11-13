@@ -1,12 +1,12 @@
-LOCALCODE WINDOWS 2.2 - CODEMIRROR 6
+LOCALCODE WINDOWS 2.0 - CODEMIRROR 6
 ===================================
 
 START
 1. Extract the complete ZIP into a normal folder.
 2. Make sure Python 3 and Node.js LTS are installed and available in PATH.
 3. Double-click run.bat.
-4. run.bat installs pywebview if needed and starts LocalCode. There is no npm build step and no missing dist/app.js dependency.
-5. CodeMirror 6 modules are loaded from esm.sh when internet is available. If they cannot load, the application still opens with a built-in text editor so problem loading, Run, and Submit remain usable.
+4. On first launch, run.bat installs the CodeMirror 6 npm packages, builds the local editor bundle, and installs pywebview if needed. An internet connection is required for this one-time setup.
+5. After setup, the editor assets are stored locally in webui/dist and LocalCode can be used offline (assuming Python, Node.js, GCC, and the WebView2 runtime are installed).
 
 EDITOR FEATURES
 - CodeMirror 6 editor with Python, C++, and JavaScript syntax highlighting.
@@ -42,7 +42,7 @@ REQUIREMENTS
 - Node.js LTS (used for JavaScript judging and the first-time editor build)
 - MSYS2 UCRT64 GCC or compatible g++ for C++
 - Microsoft Edge WebView2 Runtime for the desktop window (normally present on modern Windows; install the Evergreen Runtime if prompted)
-- Internet connection for CodeMirror 6 editor features; offline fallback editor is available
+- Internet connection for first-time setup only
 
 MSYS2 GCC
 The launcher adds no compiler directories globally. The judge automatically adds the standard C:\msys64\ucrt64\bin and C:\msys64\usr\bin directories to the compiler process PATH when they exist.
@@ -53,42 +53,3 @@ Troubleshooting update (v2.1):
 - If the editor does not load, close LocalCode and run run.bat again. The launcher verifies that webui\dist\app.js was built.
 - Starter code is loaded from the selected problem folder's starter.py, starter.cpp, or starter.js file.
 - Run tests the visible cases; Submit tests all cases. Ctrl+Enter runs and Ctrl+Shift+Enter submits.
-
-
-Startup fix notes (v2.3)
------------------------
-- The pywebview Window object is no longer attached to the JavaScript API object.
-  This avoids recursive inspection of native Windows accessibility properties.
-- The UI is served using pywebview's local HTTP server instead of file://.
-- Problem statements and starter code load before optional CodeMirror CDN imports
-  finish. If the network is unavailable, the fallback editor remains usable.
-
-
-VERSION 2.4 FIX
-- Corrected CodeMirror 6 indentOnInput extension registration.
-- This resolves the "Unrecognized extension value in extension set" error that prevented problem loading.
-- If CodeMirror initialization fails for another reason, the app now falls back to a basic editor instead of blocking problem loading.
-
-
-RUN VS SUBMIT (v2.5)
--------------------
-Run executes only the first 3 non-hidden sample tests by default. Submit executes
-every test in tests.json, including tests marked hidden. You can configure the
-Run sample count per problem with the optional top-level field:
-
-    "run_test_count": 3
-
-Allowed values are 2, 3, or 4. If fewer visible tests exist, Run uses all
-available visible tests. Submit always uses the complete test suite.
-
-
-RICH MARKDOWN + IMAGE PREVIEW (v2.6)
------------------------------------
-- Problem statements render Markdown headings, paragraphs, bold/italic text, inline code, fenced code blocks, lists, blockquotes, horizontal rules, and links.
-- Markdown images written as ![description](https://...) are displayed inline where they appear in problem.md. Remote HTTP/HTTPS images need an internet connection.
-- Local images are supported with relative paths, for example ![Example](images/example1.png). Put the image inside that problem's folder (usually an images/ subfolder). Local images are read through the Python API and embedded in the WebView, so they work offline.
-- Click any rendered image to open a larger preview. Press Escape or click outside the image to close it.
-- Local image paths are restricted to the selected problem folder; absolute paths and ../ traversal are rejected. Raw HTML in problem.md is escaped rather than executed.
-- If a local image is mentioned only as inline code (for example `attached-pattern-reference.png`), it will not display automatically. Add a Markdown image line such as ![Pattern reference](attached-pattern-reference.png).
-C++ tests.json type declarations support int, long, double, bool, string, int[], vector<int>, std::vector<int>, and nested vector forms such as vector<vector<int>>.
-The C++ judge now places standard headers before submitted code, so vector-based starter signatures compile without requiring users to add includes.

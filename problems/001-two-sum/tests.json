@@ -71,6 +71,5 @@
     "nums": "int[]",
     "target": "int"
   },
-  "returns": "int[]",
-  "run_test_count": 3
+  "returns": "int[]"
 }
