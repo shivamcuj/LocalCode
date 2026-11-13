@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LocalCode</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">LC</span><span>LocalCode</span><span class="version">2.6</span></div>
+    <div class="problem-picker"><label for="problemSelect">PROBLEM</label><select id="problemSelect"></select><button id="refreshBtn" class="icon-btn" title="Refresh problems">↻</button></div>
+    <div class="top-actions">
+      <button id="openFolderBtn" class="secondary-btn">Open problems folder</button>
+      <select id="language" class="language-select" aria-label="Programming language">
+        <option value="python">Python</option><option value="cpp">C++</option><option value="javascript">JavaScript</option>
+      </select>
+      <button id="runBtn" class="run-btn">▶ Run <kbd>Ctrl ↵</kbd></button>
+      <button id="submitBtn" class="submit-btn">Submit <kbd>Ctrl ⇧ ↵</kbd></button>
+    </div>
+  </header>
+  <main class="workspace">
+    <section class="statement-panel">
+      <div class="panel-heading"><div><div class="eyebrow">PROBLEM</div><h1 id="problemTitle">Loading problems…</h1></div><span id="difficulty" class="difficulty"></span></div>
+      <article id="statement" class="statement"><p>Loading problem statement…</p></article>
+    </section>
+    <section class="right-panel">
+      <div class="editor-section">
+        <div class="section-bar"><div><span class="section-title">Code editor</span><span id="caseCount" class="subtle"></span></div><span class="editor-hint">Tab: indent · Shift+Tab: outdent · Ctrl+Space: autocomplete</span></div>
+        <div id="editor" class="editor-host"></div>
+      </div>
+      <div class="results-section">
+        <div class="section-bar results-bar"><div><span class="section-title">Test results</span><span id="resultMeta" class="subtle">Run your code to see test results.</span></div><span id="verdict" class="verdict neutral">Ready</span></div>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Status</th><th>Input</th><th>Expected</th><th>Output</th></tr></thead><tbody id="resultsBody"><tr><td colspan="5" class="empty">No test results yet</td></tr></tbody></table></div>
+        <pre id="detail" class="detail">Select a test case to inspect its details.</pre>
+      </div>
+    </section>
+  </main>
+  <div id="imagePreview" class="image-preview" aria-hidden="true">
+    <button id="imagePreviewClose" class="image-preview-close" aria-label="Close image preview">×</button>
+    <img id="imagePreviewImg" alt="Expanded problem image">
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="src/main.js"></script>
+</body>
+</html>
