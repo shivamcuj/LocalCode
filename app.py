@@ -14,7 +14,9 @@ LANGS = engine.LANGS
 
 class LocalCodeAPI:
     def __init__(self):
-        self.window = None
+        # Do not attach a pywebview Window/native object to this API instance.
+        # js_api exposes this object to JavaScript; exposing Window causes
+        # pywebview to recursively inspect native AccessibilityObject.Bounds.
         self.problems = []
         self.drafts = {}
         self.lock = threading.Lock()
@@ -148,12 +150,14 @@ class LocalCodeAPI:
 
 def main():
     api = LocalCodeAPI()
-    page = (ROOT / "webui" / "index.html").resolve().as_uri()
-    window = webview.create_window(
+    # Serve the local UI through pywebview's built-in HTTP server instead of
+    # file://. This avoids file-origin restrictions on ES modules used by CM6.
+    os.chdir(ROOT)
+    page = "webui/index.html"
+    webview.create_window(
         "LocalCode", page, js_api=api, width=1450, height=900,
         min_size=(1050, 680), background_color="#17191f"
     )
-    api.window = window
     try:
         webview.start(debug=False, http_server=False)
     except Exception as exc:
