@@ -62,3 +62,9 @@ Startup fix notes (v2.3)
 - The UI is served using pywebview's local HTTP server instead of file://.
 - Problem statements and starter code load before optional CodeMirror CDN imports
   finish. If the network is unavailable, the fallback editor remains usable.
+
+
+VERSION 2.4 FIX
+- Corrected CodeMirror 6 indentOnInput extension registration.
+- This resolves the "Unrecognized extension value in extension set" error that prevented problem loading.
+- If CodeMirror initialization fails for another reason, the app now falls back to a basic editor instead of blocking problem loading.
