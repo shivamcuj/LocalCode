@@ -70,52 +70,63 @@ function languageMode(language) {
   return cm[language]();
 }
 
+function createFallbackEditor(doc, reason = "") {
+  const host = $("editor");
+  host.innerHTML = "";
+  const area = document.createElement("textarea");
+  area.className = "fallback-editor";
+  area.setAttribute("aria-label", "Code editor");
+  area.spellcheck = false;
+  area.value = doc;
+  area.addEventListener("input", scheduleSave);
+  host.appendChild(area);
+  editor = {
+    state: { doc: { toString: () => area.value } },
+    focus: () => area.focus(),
+    destroy: () => area.remove()
+  };
+  if (reason) showToast(`CodeMirror could not initialize; using the built-in editor. ${reason}`, true);
+  editor.focus();
+}
+
 function createEditor(doc, language) {
   if (editor) editor.destroy();
   const host = $("editor");
   host.innerHTML = "";
   if (!cm) {
-    const area = document.createElement("textarea");
-    area.className = "fallback-editor";
-    area.setAttribute("aria-label", "Code editor");
-    area.spellcheck = false;
-    area.value = doc;
-    area.addEventListener("input", scheduleSave);
-    host.appendChild(area);
-    editor = {
-      state: { doc: { toString: () => area.value } },
-      focus: () => area.focus(),
-      destroy: () => area.remove()
-    };
-    showToast("CodeMirror 6 could not load. LocalCode is using its built-in editor; check your internet connection to enable CodeMirror features.", true);
-    editor.focus();
+    createFallbackEditor(doc, "Check your internet connection to enable CodeMirror features.");
     return;
   }
-  editor = new cm.EditorView({
-    doc,
-    parent: host,
-    extensions: [
-      cm.basicSetup,
-      cm.oneDark,
-      languageMode(language),
-      cm.indentUnit.of("    "),
-      cm.indentOnInput,
-      cm.keymap.of([cm.indentWithTab]),
-      cm.EditorView.theme({
-        "&": { height: "100%", fontSize: "14px", backgroundColor: "#1e222b" },
-        ".cm-scroller": { overflow: "auto", fontFamily: "Consolas, 'Cascadia Code', monospace" },
-        ".cm-content": { padding: "14px 0", minHeight: "100%" },
-        ".cm-gutters": { backgroundColor: "#1e222b", border: "none" },
-        ".cm-activeLineGutter": { backgroundColor: "#2a303b" },
-        ".cm-activeLine": { backgroundColor: "#ffffff08" },
-        ".cm-tooltip": { zIndex: "20" }
-      }, { dark: true }),
-      cm.EditorView.updateListener.of(update => {
-        if (update.docChanged) scheduleSave();
-      })
-    ]
-  });
-  editor.focus();
+  try {
+    editor = new cm.EditorView({
+      doc,
+      parent: host,
+      extensions: [
+        cm.basicSetup,
+        cm.oneDark,
+        languageMode(language),
+        cm.indentUnit.of("    "),
+        cm.indentOnInput(),
+        cm.keymap.of([cm.indentWithTab]),
+        cm.EditorView.theme({
+          "&": { height: "100%", fontSize: "14px", backgroundColor: "#1e222b" },
+          ".cm-scroller": { overflow: "auto", fontFamily: "Consolas, 'Cascadia Code', monospace" },
+          ".cm-content": { padding: "14px 0", minHeight: "100%" },
+          ".cm-gutters": { backgroundColor: "#1e222b", border: "none" },
+          ".cm-activeLineGutter": { backgroundColor: "#2a303b" },
+          ".cm-activeLine": { backgroundColor: "#ffffff08" },
+          ".cm-tooltip": { zIndex: "20" }
+        }, { dark: true }),
+        cm.EditorView.updateListener.of(update => {
+          if (update.docChanged) scheduleSave();
+        })
+      ]
+    });
+    editor.focus();
+  } catch (error) {
+    console.error("CodeMirror initialization failed:", error);
+    createFallbackEditor(doc, error?.message || String(error));
+  }
 }
 
 function scheduleSave() {

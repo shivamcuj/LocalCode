@@ -1,72 +1,49 @@
-# LocalCode 2.3
+# LocalCode 2.4
 
 LocalCode is a **Windows desktop, offline-first LeetCode-style practice judge**. Pick a
 problem, write a solution in Python, C++ or JavaScript, and run it against local test
 files. There is no account, no server and no cloud judging.
 
-Version 2.3 is a **startup and serving fix**. The app is now served through pywebview's
-local HTTP server instead of `file://`, the `Window` object is no longer exposed to
-JavaScript, and the problem list/starter code load **without waiting** for the optional
-CodeMirror CDN import. If CodeMirror eventually loads, the fallback textarea is upgraded
-in place with the user's current code.
+Version 2.4 is an **editor reliability fix** built on the v2.3 startup work. The
+CodeMirror extension registration bug that produced
+`Unrecognized extension value in extension set` is fixed, and CodeMirror initialization is
+now wrapped in a fallback path, so a failure no longer destroys the editor pane or blocks
+problem loading.
 
-> The in-app badge still reads **2.2**, and `README_LOCALCODE.txt` is still titled
-> "LOCALCODE WINDOWS 2.2" with a "Startup fix notes (v2.3)" section appended. Only the
-> release branch is v2.3.
+> The in-app badge now reads **2.4**. `README_LOCALCODE.txt` still has the
+> "LOCALCODE WINDOWS 2.2" title, but its v2.3 startup notes and new "VERSION 2.4 FIX"
+> section are present.
 
-## What's new in v2.3
+## What's new in v2.4
 
-- **`Window` removed from the JS API.** `app.py` no longer stores `self.window` or assigns
-  `api.window = window`. This avoids pywebview recursively inspecting native Windows
-  accessibility objects during startup.
-- **Served over HTTP instead of `file://`.** `main()` now `os.chdir(ROOT)`, passes
-  `webui/index.html` to `create_window`, and lets pywebview auto-start its local HTTP
-  server (`http://127.0.0.1:<port>/index.html`). The comment in the code cites
-  file-origin restrictions on the ES modules used by CodeMirror.
-- **Non-blocking startup.** `initializeLocalCode()` no longer begins with `await cmReady`.
-  It wires the UI, loads the problem list and opens the selected problem immediately, so
-  an offline or slow network shows the statement, starter code and textarea fallback
-  right away.
-- **In-place editor upgrade.** After `loadProblemList()` finishes, it awaits `cmReady` and
-  — if CodeMirror loaded and an editor exists — re-creates the editor with the current
-  text. Users no longer have to restart to get CodeMirror once the CDN import completes.
-- **`README_LOCALCODE.txt`** gained a "Startup fix notes (v2.3)" section describing these
-  three changes.
-- **Sample solution files reformatted** (`user_solution.cpp` / `user_solution.js` under
-  `problems/`). No behavior change.
+- **`indentOnInput` registered correctly.** `webui/src/main.js` now passes
+  `cm.indentOnInput()` (the extension) instead of `cm.indentOnInput` (the factory
+  function). This is the actual fix for the CodeMirror startup error.
+- **Reusable fallback editor.** The textarea fallback moved into
+  `createFallbackEditor(doc, reason)`, used both when the CDN import fails and when the
+  `EditorView` constructor throws. The reason is shown in a toast.
+- **Resilient editor construction.** The `new cm.EditorView({...})` call is wrapped in
+  `try/catch`. On failure, the error is logged and the textarea fallback is created
+  instead of leaving an empty editor host.
+- **Version badge bumped** from `2.2` to `2.4` in `webui/index.html`.
+- **Release notes** in `README_LOCALCODE.txt` gained a "VERSION 2.4 FIX" section.
 
-## Fixed since v2.2
+## Fixed since v2.3
 
-| v2.2 problem | Status in v2.3 |
+| v2.3 problem | Status in v2.4 |
 | --- | --- |
-| `api.window = window` could trigger recursive native-accessibility inspection and crash startup | **Fixed** — the `Window` reference is no longer attached to the API object |
-| `initializeLocalCode()` awaited `cmReady`, so an offline/slow CDN could leave the problem statement and starter code blank for up to 12 s | **Fixed** — the UI and problem list load first; CodeMirror is awaited only for the optional upgrade |
-| UI loaded from `file://`, which can block ES-module imports in WebView2 | **Fixed** — pywebview's local HTTP server serves the UI from `http://127.0.0.1` |
-| A fallback textarea could not become CodeMirror without restarting the app | **Fixed** — the editor is upgraded in place once `cmReady` resolves, preserving the code |
-| Offline users had to wait for an editor import that could not succeed | **Fixed** — the textarea appears immediately and remains usable |
+| `Unrecognized extension value in extension set` from passing `cm.indentOnInput` uncalled | **Fixed** — `cm.indentOnInput()` is called; verified against `@codemirror/state` + `@codemirror/language` |
+| CodeMirror upgrade destroyed the working textarea and left the editor pane blank | **Fixed** — the constructor now succeeds; if it does not, the fallback is recreated |
+| An editor-initialization failure blocked problem loading | **Fixed** — construction is caught and falls back to the textarea |
+| The fallback only covered a failed CDN import, not a failed `EditorView` | **Fixed** — `createFallbackEditor()` handles both, with an error-reason toast |
+| In-app badge still said `2.2` | **Fixed** — badge says `2.4` |
 
-## Still broken or carried over from v2.2
+## Still broken or carried over from v2.3
 
-These are **not** fixed in v2.3. `engine.py` and `run.bat` are unchanged from v2.2.
+These are **not** fixed in v2.4. `app.py`, `engine.py` and `run.bat` are unchanged from
+v2.3.
 
-1. **`indentOnInput` is still registered incorrectly — now with a worse failure mode.**
-   `webui/src/main.js` passes `cm.indentOnInput` (the function) instead of
-   `cm.indentOnInput()` (the extension). CodeMirror rejects the extension set with:
-
-   ```text
-   Unrecognized extension value in extension set (function indentOnInput() { ... })
-   ```
-
-   (verified against `@codemirror/state` + `@codemirror/language`). Because v2.3 now
-   upgrades the working textarea *after* `cmReady`, this bug hits the upgrade path:
-   `createEditor()` destroys the textarea, clears the editor host, then the `EditorView`
-   constructor throws outside any `try/catch`. The result is an **empty editor pane** plus
-   an "Application error: Unrecognized extension value in extension set" toast. If
-   CodeMirror resolves before the first problem loads, the same error is caught by
-   `loadProblem()` and shown as "Problem loading failed". Offline mode (textarea only) is
-   unaffected.
-
-2. **C++ `vector<...>` types still fail.** `engine.ctype()` accepts only `int`, `long`,
+1. **C++ `vector<...>` types still fail.** `engine.ctype()` accepts only `int`, `long`,
    `double`, `bool`, `string` and `T[]`; `vector<int>` raises `KeyError`.
    `problems/695-second-largest-element`, `702-largest-element` and `838-linear-search`
    declare `"types": {"nums": "vector<int>"}`, so C++ Run/Submit reports:
@@ -77,37 +54,39 @@ These are **not** fixed in v2.3. `engine.py` and `run.bat` are unchanged from v2
 
    (re-verified). Python and JavaScript work for those problems.
 
-3. **C++ standard headers are still emitted after user code.** `engine.py` writes
+2. **C++ standard headers are still emitted after user code.** `engine.py` writes
    `code + "\n" + CPP_HELP + main`. The `695`, `702` and `838` starters use `vector<int>`
    without includes, so they fail with `'vector' has not been declared` even when the type
    map is changed to `int[]` (re-verified).
 
-4. **The full editor still needs the network on every launch.** CodeMirror is imported
+3. **The full editor still needs the network on every launch.** CodeMirror is imported
    from `https://esm.sh`. Offline, proxied or DNS-blocked users keep the plain textarea:
-   no highlighting, autocomplete, folding or bracket matching.
+   no highlighting, autocomplete, folding or bracket matching. The fallback textarea also
+   has no Tab-to-indent handling.
 
-5. **Rich Markdown and image previews are still missing.** Headings, paragraphs,
+4. **Rich Markdown and image previews are still missing.** Headings, paragraphs,
    bold/italic, inline code, fenced code and simple bullets render. Links, images, ordered
    lists, blockquotes, horizontal rules and the click-to-zoom image modal do not.
 
-6. **Run/Submit sample logic is still missing.** `run_test_count` is ignored.
+5. **Run/Submit sample logic is still missing.** `run_test_count` is ignored.
    **Run executes every visible test**; **Submit** executes every test including hidden
    cases. The 205–245 visible tests in `695`/`702`/`838` make Run slow.
 
-7. **`webui/package.json` is dead weight.** Its CodeMirror dependencies and esbuild script
+6. **`webui/package.json` is dead weight.** Its CodeMirror dependencies and esbuild script
    are unused at runtime, and `webui/dist/` is no longer loaded.
 
-8. **The version badge is still `2.2`** in `webui/index.html`, and the
-   `README_LOCALCODE.txt` title still says 2.2 even though v2.3 notes were appended.
+7. **`README_LOCALCODE.txt` title still says 2.2** even though v2.3 and v2.4 notes were
+   appended.
 
-9. **The editor upgrade replays unconditionally.** Even when CodeMirror was ready before
-   the first problem loaded, `initializeLocalCode()` calls `createEditor()` again after
-   `cmReady`, discarding the current cursor position and undo history. The upgrade call is
-   not wrapped in `try/catch`, so a constructor failure cannot fall back to the textarea.
+8. **The editor upgrade still replays unconditionally.** After `await cmReady`,
+   `initializeLocalCode()` calls `createEditor()` again whenever `cm` and an editor exist —
+   even if CodeMirror was already active. That discards cursor position and undo history.
+   If the first CodeMirror attempt failed, the replay retries and can show the fallback
+   toast twice.
 
-10. **`os.chdir(ROOT)` is process-wide.** It is harmless today because `engine.py` runs in
-    temporary directories and `PROBLEMS_DIR` is absolute, but any future relative path
-    would now resolve against the app root.
+9. **`os.chdir(ROOT)` is process-wide.** It is harmless today because `engine.py` runs in
+   temporary directories and `PROBLEMS_DIR` is absolute, but any future relative path
+   would resolve against the app root.
 
 ## Still open from earlier versions
 
@@ -175,10 +154,10 @@ LocalCode/
   run.bat                 # Python check, optional Node warning, pywebview install, launch
   build_exe.bat           # placeholder (no EXE build)
   README.md               # this file
-  README_LOCALCODE.txt    # plain-text 2.2 notes + v2.3 startup fixes
+  README_LOCALCODE.txt    # plain-text 2.2 notes + v2.3/v2.4 fix notes
   README_GCC_FIX.txt      # MSYS2 GCC runtime-DLL note
   webui/
-    index.html            # app shell; loads src/main.js
+    index.html            # app shell; loads src/main.js; badge 2.4
     style.css             # dark theme, markdown styles, .fallback-editor
     src/main.js           # UI logic, markdown renderer, CDN CodeMirror loader/fallback
     package.json          # vestigial CodeMirror deps + unused esbuild script
@@ -230,7 +209,7 @@ Optional fields:
 
 A test can set `"hidden": true`; hidden cases run only on **Submit**.
 
-`run_test_count` may appear in older problem files but is **ignored in v2.3**: Run always
+`run_test_count` may appear in older problem files but is **ignored in v2.4**: Run always
 executes all non-hidden tests.
 
 Example:
@@ -252,7 +231,7 @@ Example:
 }
 ```
 
-### C++ types accepted in v2.3
+### C++ types accepted in v2.4
 
 | JSON type | C++ type     |
 | --------- | ------------ |
@@ -310,12 +289,10 @@ Every Run/Submit:
 Verdicts: `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`,
 `Execution Error` (setup/compile failure).
 
-## Known issues and limitations (v2.3)
+## Known issues and limitations (v2.4)
 
-- **The editor can go blank after CodeMirror loads** because of the `indentOnInput`
-  registration bug. The textarea fallback works, but the upgrade path throws. Fix:
-  change `cm.indentOnInput` to `cm.indentOnInput()` in `webui/src/main.js`.
-- **Full editor requires internet.** Without `esm.sh`, the textarea fallback is used.
+- **Full editor requires internet.** Without `esm.sh`, the textarea fallback is used and
+  CodeMirror features are unavailable.
 - **C++ is broken for `695`, `702`, `838`** — `vector<int>` types are rejected and
   headerless starters do not compile. Use Python or JavaScript for those problems, or
   rewrite the type map and add the include manually.
@@ -326,21 +303,19 @@ Verdicts: `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`,
 - **`run.bat` does not enforce `pywebview>=5.4`.** It only checks that `webview` imports.
 - **`build_exe.bat` is a placeholder.** Use `run.bat` from the source folder.
 - **No root `.gitignore`** for generated files.
-- **Version strings are inconsistent:** badge and plain-text title say 2.2.
+- **Plain-text title still says 2.2.**
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
-| Editor is a plain textarea | CodeMirror could not be fetched from `esm.sh` (offline, proxy, DNS). Reconnect and restart for the full editor. |
-| Editor briefly works, then goes blank + "Application error: Unrecognized extension value..." | The v2.3 upgrade path hit the `cm.indentOnInput` bug. Change it to `cm.indentOnInput()` in `webui/src/main.js`. |
-| `Unrecognized extension value in extension set` | Same cause: a CodeMirror extension factory is passed instead of being called. |
-| "Problem loading failed" right after startup | CodeMirror resolved before the first problem and `createEditor()` threw on `indentOnInput`; check the browser/webview console. |
-| Problems load but no highlighting | Expected in fallback mode; CodeMirror is optional and loaded from the CDN. |
+| Editor is a plain textarea | CodeMirror could not be fetched from `esm.sh` (offline, proxy, DNS). The toast explains the reason. Reconnect and restart for the full editor. |
+| "CodeMirror could not initialize; using the built-in editor..." | The `EditorView` constructor threw. The textarea is active; the toast/console contains the underlying error. |
+| Problems/drafts work but no highlighting or Tab indent | Expected in fallback mode; those features require CodeMirror. |
 | C++: `Runner failed: 'vector<int>'` | `ctype()` does not support `vector<int>`. Use `int[]` in `types` **and** add `#include <bits/stdc++.h>` to your code. |
 | C++: `'vector' has not been declared` | Headers are emitted after user code. Add the include at the top of your solution. |
 | "LocalCode could not start" / webview initialization error | Install or repair the Microsoft Edge WebView2 Evergreen Runtime. |
-| Window stays blank after the HTTP-serving change | Check that `webui/index.html` exists, then run `python app.py` in a terminal to see the pywebview traceback. |
+| Window stays blank | Check that `webui/index.html` exists, then run `python app.py` in a terminal to see the pywebview traceback. |
 | `g++ was not found...` | Install MSYS2 UCRT64 GCC and add `C:\msys64\ucrt64\bin` to `PATH`. |
 | `cc1plus.exe - Entry Point Not Found` / `libgcc_s_seh-1.dll` missing | MSYS2 runtime DLLs are not on the child-process `PATH`; only default `C:\msys64` locations are auto-added. See `README_GCC_FIX.txt`. |
 | `Node.js not found...` warning at launch | Harmless for Python/C++. Install Node.js LTS only if you need JavaScript judging. |
@@ -351,10 +326,13 @@ Verdicts: `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`,
 
 ## Version history (this branch)
 
+- **v2.4** — fixes CodeMirror `indentOnInput` registration (`cm.indentOnInput()`), adds a
+  shared textarea fallback for both CDN and constructor failures, and bumps the badge to
+  2.4. C++ vector types, header ordering, rich Markdown/images and `run_test_count`
+  remain unfixed.
 - **v2.3** — removes the `Window` reference from the JS API, serves the UI through
   pywebview's local HTTP server, loads problems/starter code without waiting for the
-  CodeMirror CDN, and upgrades the fallback textarea in place. C++ vector types, header
-  ordering, `indentOnInput`, rich Markdown/images and `run_test_count` remain unfixed.
+  CodeMirror CDN, and upgrades the fallback textarea in place.
 - **v2.2** — removes the npm/esbuild build step, loads `src/main.js` directly, restores
   CDN CodeMirror with a 12-second timeout and textarea fallback, makes Node.js optional
   for launch, and fixes the version badge.
