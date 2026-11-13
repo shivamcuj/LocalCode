@@ -1,7 +1,5 @@
 """LocalCode desktop application powered by CodeMirror 6."""
-import base64
 import json
-import mimetypes
 import os
 import threading
 from pathlib import Path
@@ -16,9 +14,7 @@ LANGS = engine.LANGS
 
 class LocalCodeAPI:
     def __init__(self):
-        # Do not attach a pywebview Window/native object to this API instance.
-        # js_api exposes this object to JavaScript; exposing Window causes
-        # pywebview to recursively inspect native AccessibilityObject.Bounds.
+        self.window = None
         self.problems = []
         self.drafts = {}
         self.lock = threading.Lock()
@@ -77,47 +73,13 @@ class LocalCodeAPI:
                 starter = Path(meta["dir"]) / LANGS[language][1]
                 code = starter.read_text(encoding="utf8") if starter.is_file() else engine.DEFAULT[language]
             visible_count = sum(1 for t in meta["tests"] if not t.get("hidden"))
-            configured_run_count = meta.get("run_test_count", 3)
-            try:
-                configured_run_count = int(configured_run_count)
-            except (TypeError, ValueError):
-                configured_run_count = 3
-            run_test_count = min(4, max(2, configured_run_count))
-            run_test_count = min(run_test_count, visible_count)
             return {
                 "ok": True, "index": i, "id": meta["id"], "title": meta["title"],
                 "difficulty": meta.get("difficulty", ""),
                 "statement": (Path(meta["dir"]) / "problem.md").read_text(encoding="utf8"),
                 "code": code, "language": language,
                 "visible_count": visible_count, "total_count": len(meta["tests"]),
-                "run_test_count": run_test_count,
             }
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
-
-    def resolve_image(self, index, image_path):
-        """Return a safe local problem image as a data URL for the WebView."""
-        try:
-            i = int(index)
-            if i < 0 or i >= len(self.problems):
-                raise IndexError("Problem selection is out of range")
-            relative = str(image_path or "").strip().replace("\\", "/")
-            if not relative or relative.startswith(("/", "\\")):
-                raise ValueError("Image path must be relative to the problem folder")
-            # Do not allow remote URLs or traversal outside the selected problem.
-            if ":" in relative.split("/", 1)[0]:
-                raise ValueError("Only local relative image paths are accepted")
-            problem_dir = Path(self.problems[i]["dir"]).resolve()
-            image_file = (problem_dir / relative).resolve()
-            if image_file != problem_dir and problem_dir not in image_file.parents:
-                raise ValueError("Image path escapes the problem folder")
-            if not image_file.is_file():
-                raise FileNotFoundError(f"Image not found: {relative}")
-            mime = mimetypes.guess_type(image_file.name)[0] or "application/octet-stream"
-            if not mime.startswith("image/"):
-                raise ValueError("The referenced local file is not an image")
-            encoded = base64.b64encode(image_file.read_bytes()).decode("ascii")
-            return {"ok": True, "src": f"data:{mime};base64,{encoded}"}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -140,21 +102,7 @@ class LocalCodeAPI:
             self.drafts[(meta["dir"], language)] = code
             ext = LANGS[language][2]
             (Path(meta["dir"]) / f"user_solution.{ext}").write_text(code, encoding="utf8")
-            # Run is a fast feedback loop: use only the first 2-4 non-hidden
-            # sample tests. Submit always evaluates the complete suite, including
-            # hidden tests. `run_test_count` is configurable in each tests.json.
-            visible_tests = [t for t in meta["tests"] if not t.get("hidden")]
-            if submit:
-                tests = list(meta["tests"])
-            else:
-                try:
-                    sample_count = int(meta.get("run_test_count", 3))
-                except (TypeError, ValueError):
-                    sample_count = 3
-                sample_count = min(4, max(2, sample_count))
-                tests = visible_tests[:sample_count]
-            if not tests:
-                return {"ok": False, "error": "This problem has no test cases available for this action."}
+            tests = [t for t in meta["tests"] if submit or not t.get("hidden")]
             out = engine.judge(language, code, meta, tests)
             if out.get("tle"):
                 return {"ok": True, "verdict": "Time Limit Exceeded", "passed": 0,
@@ -186,7 +134,6 @@ class LocalCodeAPI:
             if passed == len(tests) and len(rows) == len(tests):
                 verdict = "Accepted"
             return {"ok": True, "verdict": verdict, "passed": passed, "total": len(tests),
-                    "test_mode": "all" if submit else "sample",
                     "ms": round(sum(r.get("ms", 0) for r in rows), 2), "results": rows}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
@@ -201,14 +148,12 @@ class LocalCodeAPI:
 
 def main():
     api = LocalCodeAPI()
-    # Serve the local UI through pywebview's built-in HTTP server instead of
-    # file://. This avoids file-origin restrictions on ES modules used by CM6.
-    os.chdir(ROOT)
-    page = "webui/index.html"
-    webview.create_window(
+    page = (ROOT / "webui" / "index.html").resolve().as_uri()
+    window = webview.create_window(
         "LocalCode", page, js_api=api, width=1450, height=900,
         min_size=(1050, 680), background_color="#17191f"
     )
+    api.window = window
     try:
         webview.start(debug=False, http_server=False)
     except Exception as exc:
