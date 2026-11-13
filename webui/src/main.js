@@ -1,11 +1,32 @@
-import { basicSetup, EditorView } from "codemirror";
-import { keymap } from "@codemirror/view";
-import { indentUnit, indentOnInput } from "@codemirror/language";
-import { indentWithTab } from "@codemirror/commands";
-import { python } from "@codemirror/lang-python";
-import { cpp } from "@codemirror/lang-cpp";
-import { javascript } from "@codemirror/lang-javascript";
-import { oneDark } from "@codemirror/theme-one-dark";
+// Load CodeMirror 6 directly as ES modules. This avoids a missing dist/app.js
+// build artifact being able to leave the entire desktop window blank.
+// If the CDN is unavailable, LocalCode falls back to a functional textarea.
+let cm = null;
+const cmReady = (async () => {
+  try {
+    const imports = Promise.all([
+      import("https://esm.sh/codemirror@6.0.2"),
+      import("https://esm.sh/@codemirror/view@6"),
+      import("https://esm.sh/@codemirror/language@6"),
+      import("https://esm.sh/@codemirror/commands@6"),
+      import("https://esm.sh/@codemirror/lang-python@6"),
+      import("https://esm.sh/@codemirror/lang-cpp@6"),
+      import("https://esm.sh/@codemirror/lang-javascript@6"),
+      import("https://esm.sh/@codemirror/theme-one-dark@6")
+    ]);
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("CodeMirror download timed out")), 12000));
+    const [core, view, language, commands, pyLang, cppLang, jsLang, theme] = await Promise.race([imports, timeout]);
+    cm = {
+      basicSetup: core.basicSetup, EditorView: core.EditorView,
+      keymap: view.keymap, indentUnit: language.indentUnit,
+      indentOnInput: language.indentOnInput, indentWithTab: commands.indentWithTab,
+      python: pyLang.python, cpp: cppLang.cpp, javascript: jsLang.javascript,
+      oneDark: theme.oneDark
+    };
+  } catch (error) {
+    console.warn("CodeMirror 6 could not be loaded; using the built-in editor fallback.", error);
+  }
+})();
 
 let editor = null;
 let selectedProblem = 0;
@@ -14,12 +35,6 @@ let currentMeta = null;
 let saveTimer = null;
 
 const $ = (id) => document.getElementById(id);
-const languageExtensions = {
-  python: python,
-  cpp: cpp,
-  javascript: javascript,
-};
-
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, ch => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -52,22 +67,41 @@ function markdownToHtml(md) {
 }
 
 function languageMode(language) {
-  return languageExtensions[language]();
+  return cm[language]();
 }
 
 function createEditor(doc, language) {
   if (editor) editor.destroy();
-  editor = new EditorView({
+  const host = $("editor");
+  host.innerHTML = "";
+  if (!cm) {
+    const area = document.createElement("textarea");
+    area.className = "fallback-editor";
+    area.setAttribute("aria-label", "Code editor");
+    area.spellcheck = false;
+    area.value = doc;
+    area.addEventListener("input", scheduleSave);
+    host.appendChild(area);
+    editor = {
+      state: { doc: { toString: () => area.value } },
+      focus: () => area.focus(),
+      destroy: () => area.remove()
+    };
+    showToast("CodeMirror 6 could not load. LocalCode is using its built-in editor; check your internet connection to enable CodeMirror features.", true);
+    editor.focus();
+    return;
+  }
+  editor = new cm.EditorView({
     doc,
-    parent: $("editor"),
+    parent: host,
     extensions: [
-      basicSetup,
-      oneDark,
+      cm.basicSetup,
+      cm.oneDark,
       languageMode(language),
-      indentUnit.of("    "),
-      indentOnInput,
-      keymap.of([indentWithTab]),
-      EditorView.theme({
+      cm.indentUnit.of("    "),
+      cm.indentOnInput,
+      cm.keymap.of([cm.indentWithTab]),
+      cm.EditorView.theme({
         "&": { height: "100%", fontSize: "14px", backgroundColor: "#1e222b" },
         ".cm-scroller": { overflow: "auto", fontFamily: "Consolas, 'Cascadia Code', monospace" },
         ".cm-content": { padding: "14px 0", minHeight: "100%" },
@@ -76,7 +110,7 @@ function createEditor(doc, language) {
         ".cm-activeLine": { backgroundColor: "#ffffff08" },
         ".cm-tooltip": { zIndex: "20" }
       }, { dark: true }),
-      EditorView.updateListener.of(update => {
+      cm.EditorView.updateListener.of(update => {
         if (update.docChanged) scheduleSave();
       })
     ]
@@ -218,6 +252,7 @@ async function initializeLocalCode() {
   if (appInitialized) return;
   if (!window.pywebview || !window.pywebview.api) return;
   appInitialized = true;
+  await cmReady;
   $("problemSelect").addEventListener("change", e => loadProblem(e.target.value));
   $("language").addEventListener("change", async e => {
     try {

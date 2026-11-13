@@ -19,36 +19,9 @@ if %errorlevel%==0 (
 
 where node >nul 2>nul
 if errorlevel 1 (
-    echo Node.js was not found. It is required by LocalCode for JavaScript submissions and building the editor.
-    echo Install Node.js LTS from https://nodejs.org/ and run this file again.
-    pause
-    exit /b 1
-)
-
-if not exist "webui\dist\app.js" (
-    echo First-time setup: downloading and building the CodeMirror 6 editor...
-    pushd webui
-    call npm install --no-audit --no-fund
-    if errorlevel 1 (
-        echo Failed to install CodeMirror dependencies. Check your internet connection and try again.
-        popd
-        pause
-        exit /b 1
-    )
-    call npm run build
-    if errorlevel 1 (
-        echo Failed to build the CodeMirror editor.
-        popd
-        pause
-        exit /b 1
-    )
-    if not exist "dist\app.js" (
-        echo Build completed but webui\dist\app.js was not created.
-        popd
-        pause
-        exit /b 1
-    )
-    popd
+    echo WARNING: Node.js was not found. Python and C++ will work, but JavaScript submissions need Node.js.
+    echo Install Node.js LTS from https://nodejs.org/ if you want JavaScript support.
+    echo.
 )
 
 %PYTHON_CMD% -c "import webview" >nul 2>nul
