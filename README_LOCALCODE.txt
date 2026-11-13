@@ -1,12 +1,12 @@
-LOCALCODE WINDOWS 2.0 - CODEMIRROR 6
+LOCALCODE WINDOWS 2.2 - CODEMIRROR 6
 ===================================
 
 START
 1. Extract the complete ZIP into a normal folder.
 2. Make sure Python 3 and Node.js LTS are installed and available in PATH.
 3. Double-click run.bat.
-4. On first launch, run.bat installs the CodeMirror 6 npm packages, builds the local editor bundle, and installs pywebview if needed. An internet connection is required for this one-time setup.
-5. After setup, the editor assets are stored locally in webui/dist and LocalCode can be used offline (assuming Python, Node.js, GCC, and the WebView2 runtime are installed).
+4. run.bat installs pywebview if needed and starts LocalCode. There is no npm build step and no missing dist/app.js dependency.
+5. CodeMirror 6 modules are loaded from esm.sh when internet is available. If they cannot load, the application still opens with a built-in text editor so problem loading, Run, and Submit remain usable.
 
 EDITOR FEATURES
 - CodeMirror 6 editor with Python, C++, and JavaScript syntax highlighting.
@@ -42,7 +42,7 @@ REQUIREMENTS
 - Node.js LTS (used for JavaScript judging and the first-time editor build)
 - MSYS2 UCRT64 GCC or compatible g++ for C++
 - Microsoft Edge WebView2 Runtime for the desktop window (normally present on modern Windows; install the Evergreen Runtime if prompted)
-- Internet connection for first-time setup only
+- Internet connection for CodeMirror 6 editor features; offline fallback editor is available
 
 MSYS2 GCC
 The launcher adds no compiler directories globally. The judge automatically adds the standard C:\msys64\ucrt64\bin and C:\msys64\usr\bin directories to the compiler process PATH when they exist.
