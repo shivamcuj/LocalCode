@@ -90,3 +90,5 @@ RICH MARKDOWN + IMAGE PREVIEW (v2.6)
 - Click any rendered image to open a larger preview. Press Escape or click outside the image to close it.
 - Local image paths are restricted to the selected problem folder; absolute paths and ../ traversal are rejected. Raw HTML in problem.md is escaped rather than executed.
 - If a local image is mentioned only as inline code (for example `attached-pattern-reference.png`), it will not display automatically. Add a Markdown image line such as ![Pattern reference](attached-pattern-reference.png).
+C++ tests.json type declarations support int, long, double, bool, string, int[], vector<int>, std::vector<int>, and nested vector forms such as vector<vector<int>>.
+The C++ judge now places standard headers before submitted code, so vector-based starter signatures compile without requiring users to add includes.

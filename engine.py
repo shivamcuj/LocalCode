@@ -91,8 +91,39 @@ template<class T>static void pr(ostream&o,const vector<T>&v){o<<'[';for(size_t k
 
 
 def ctype(t):
-    if t.endswith("[]"): return f"vector<{ctype(t[:-2])}>"
-    return {"int": "int", "long": "long long", "double": "double", "bool": "bool", "string": "string"}[t]
+    """Convert tests.json type declarations to C++ types.
+
+    Accepts both the compact legacy form (int[]) and standard C++ forms
+    (vector<int>, std::vector<int>, vector<vector<int>>).
+    """
+    if not isinstance(t, str):
+        raise ValueError(f"Invalid C++ input type: {t!r}")
+
+    t = t.strip().replace("std::", "")
+    primitive = {
+        "int": "int",
+        "long": "long long",
+        "long long": "long long",
+        "double": "double",
+        "float": "float",
+        "bool": "bool",
+        "string": "string",
+        "char": "char",
+    }
+    if t in primitive:
+        return primitive[t]
+
+    if t.endswith("[]"):
+        return f"vector<{ctype(t[:-2])}>"
+
+    match = re.fullmatch(r"vector\s*<(.+)>", t)
+    if match:
+        return f"vector<{ctype(match.group(1).strip())}>"
+
+    raise ValueError(
+        f"Unsupported C++ input type '{t}' in tests.json. "
+        "Use types such as int, string, int[], or vector<int>."
+    )
 
 
 def windows_compiler_env():
@@ -163,7 +194,7 @@ def judge(lang, code, m, tests):
                     )
                 else:
                     main = f'int main(){{\n{decl}  auto r = Solution().{m["method"]}({call});\n  ofstream f("result.json"); pr(f,r);\n}}\n'
-                w("main.cpp", code + "\n" + CPP_HELP + main)
+                w("main.cpp", CPP_HELP + "\n" + code + "\n" + main)
                 c = run_proc([gxx, "-O2", "-std=c++17", "main.cpp", "-o", "main.exe"], tmp, 120)
                 if c.returncode: return {"error": c.stderr}
                 res, rp = [], os.path.join(tmp, "result.json")
