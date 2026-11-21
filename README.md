@@ -4,47 +4,49 @@ LocalCode is a **Windows desktop, offline-first LeetCode-style practice judge**.
 problem, write a solution in Python, C++ or JavaScript, and run it against local test
 files. There is no account, no server and no cloud judging.
 
-Version 2.6.1 is a **C++ judge release**. The long-standing `vector<int>` type error and
-the header-ordering bug are fixed: C++ starters that use `vector`, `string`, `cout` and
-friends now compile without the user adding `#include <bits/stdc++.h>` manually. A new
-problem, `213-maximum-consecutive-ones`, uses those C++ signatures. The `838` test data
-was also reworked (much smaller file, smaller maximum input).
+Version 2.6.1 includes the C++ judge fixes from the release branch plus a final set of
+workspace fixes: locally bundled CodeMirror, persisted drafts, a C++ submission sandbox,
+parallel C++ test cases, runner-failure checks, numeric problem ordering, and expanded
+C++ type/return validation. The `213-maximum-consecutive-ones` problem uses the C++
+signatures that previously failed, and `838-linear-search` was reworked to a much smaller
+test file.
 
-> Version strings are still mixed: the UI badge says **2.6**, and
-> `README_LOCALCODE.txt` still has the "LOCALCODE WINDOWS 2.2" title, although its body
-> now includes v2.3–v2.6.1 notes.
+The UI badge and `README_LOCALCODE.txt` now both report **2.6.1**.
 
 ## What's new in v2.6.1
 
 ### C++ type system expanded
 
-`engine.ctype()` in `engine.py` was rewritten. It now accepts:
+`engine.ctype()` in `engine.py` accepts:
 
 | `tests.json` type | Generated C++ type |
 | --- | --- |
-| `int` | `int` |
-| `long` | `long long` |
-| `long long` | `long long` |
-| `double` | `double` |
-| `float` | `float` |
-| `bool` | `bool` |
-| `string` | `string` |
-| `char` | `char` |
-| `T[]` | `vector<T>` |
-| `vector<T>` | `vector<T>` |
-| `std::vector<T>` | `vector<T>` (prefix stripped) |
-| nested forms | `vector<vector<int>>`, `vector<string>`, `int[][][]`, … |
+| `int`, `signed`, `signed int` | `int` |
+| `long`, `long int`, `long long`, `long long int` | `long long` |
+| `double`, `long double`, `float` | `double`, `long double`, `float` |
+| `bool`, `string` | `bool`, `string` |
+| `char`, `signed char`, `unsigned char` | matching C++ character type |
+| `short`, `short int`, `unsigned short` | `short`, `unsigned short` |
+| `unsigned`, `unsigned int` | `unsigned int` |
+| `unsigned long`, `unsigned long long`, `size_t` | `unsigned long long` |
+| `T[]`, `T []`, `T [ ]`, `T[][]`, `vector<T> []` | nested `vector<…>` |
+| `vector<T>`, `deque<T>`, `list<T>`, `set<T>`, `unordered_set<T>` | matching C++ container |
+| `std::…` forms | prefix stripped |
+| nested forms | `vector<deque<int>>`, `vector<vector<int>>`, … |
 
-It normalizes whitespace inside `vector< … >`, handles `std::` prefixes, and raises a
-readable `ValueError` for anything it cannot map:
+It normalizes whitespace, handles `std::` prefixes, and raises a readable `ValueError` for
+anything it cannot map:
 
 ```text
 Unsupported C++ input type 'map<int,int>' in tests.json.
-Use types such as int, string, int[], or vector<int>.
+Use types such as int, string, int[], vector<int>, or deque<int>.
 ```
 
 Previously this path raised a bare `KeyError`, which surfaced as
 `Runner failed: 'vector<int>'`.
+
+`engine.rtype()` validates the separate `returns` field. Missing, unsupported and
+`void`-without-`stdout` declarations now produce clear errors instead of being ignored.
 
 ### C++ header ordering fixed
 
@@ -81,9 +83,9 @@ solution.
 - Types: `{"nums": "vector<int>"}` — the exact form that used to break C++.
 - Starters for Python, C++ and JavaScript are included.
 
-Adding it inserts it at **index 1** in the picker (ids are sorted as strings), so the other
-problems shift down by one. Drafts are keyed by problem folder, so saved drafts are not
-lost by the renumbering.
+Adding it inserts it at **index 1** in the picker (numeric ids are sorted by value), so
+the other problems shift down by one. Drafts are keyed by problem folder, so saved drafts
+are not lost by the renumbering.
 
 ### `838-linear-search` data rework
 
@@ -100,8 +102,8 @@ lost by the renumbering.
 
 ### Docs
 
-- `README_LOCALCODE.txt` gained two v2.6.1 lines about the expanded C++ types and the new
-  header order.
+- `README_LOCALCODE.txt` was updated for v2.6.1, including the bundled editor, persisted
+  drafts, sandbox, parallel C++ cases and expanded C++ types.
 
 ## Fixed since v2.6
 
@@ -125,6 +127,42 @@ Verified end to end with `g++ 16.2.0` (MSYS2) and the real `engine.judge` path:
   `vector<vector<vector<int>>>`.
 - Python and JavaScript still pass `213` and `838`.
 
+### Workspace fixes (after v2.6.1, not yet released)
+
+These changes fix issues 2, 4, 5, 6, 7, 8, 9, 10, 13, 18, 19, 20, 21 and 22 from the
+tracked issue list.
+
+- **C++ `returns` validation (2).** `engine.judge()` requires the field, converts it with
+  `rtype()`, rejects unsupported declarations, and rejects `void` unless
+  `"output_mode": "stdout"`.
+- **Submission sandbox (4).** User code runs with credential-like environment variables
+  removed and, on Windows, inside a Job Object with an active-process limit, a memory
+  limit and kill-on-close cleanup. Non-Windows or failed Job creation falls back to the
+  existing process launch.
+- **Runner failures surfaced (5).** A non-zero Python/JavaScript runner exit code or a
+  missing `out.json` now returns an error instead of silently empty results.
+- **Offline editor (6).** CodeMirror 6 is bundled in `webui/vendor/codemirror.js` and
+  loaded by `webui/index.html`. The CDN import is only a fallback; a textarea remains the
+  last resort.
+- **Editor replay fixed (7).** A failed CodeMirror load is attempted only once, preserving
+  the textarea's cursor and undo history instead of replaying on every problem load.
+- **Run sample wording (8) and Basic pill (9).** The UI no longer shows `Run: 1 sample`
+  for a single visible test, and `difficulty: "Basic"` uses a blue pill.
+- **Refresh and problem ordering (10, 18).** `refresh_problems()` rescans the folder when
+  the refresh button is clicked, `list_problems()` uses a cached list, and numeric ids
+  sort by value (`213` before `1000`) rather than as strings.
+- **No process-wide `chdir` (13).** `app.py` uses an absolute path to `webui/index.html`.
+- **Recursive `unordered` (18).** The comparison helper normalizes nested lists, not only
+  the top-level result.
+- **Draft persistence (19).** Drafts are saved to `.localcode_drafts.json` atomically and
+  restored on the next launch; they are no longer memory-only.
+- **Faster C++ Submit (20).** Test cases run in parallel with up to four workers while
+  keeping separate per-case directories and timeouts.
+- **Version labels (21).** The UI badge and `README_LOCALCODE.txt` title now say 2.6.1.
+- **Expanded C++ types (22).** `ctype()` accepts spaced arrays, unsigned
+  and short variants, `char`, `float`, `deque`, `list`, `set`, `unordered_set` and nested
+  combinations, with matching reader/writer helpers in `CPP_HELP`.
+
 ## Regressions and new issues in v2.6.1
 
 1. **`838-linear-search` coverage shrank.** 256 → 245 tests and maximum array length
@@ -134,56 +172,26 @@ Verified end to end with `g++ 16.2.0` (MSYS2) and the real `engine.judge` path:
    reverses the v2.5 documentation improvement.
 3. **`838/user_solution.cpp` has `return true;` again** inside an `int` function. It
    compiles (true → 1) but is a leftover placeholder.
-4. **Badge still says `2.6`.** The release is v2.6.1 but `webui/index.html` was not
-   bumped.
-5. **`README_LOCALCODE.txt` title still says 2.2.**
-6. **`ctype` still rejects spaced legacy forms** such as `int []` (no space support before
-   `[]`), `unsigned int`, and any STL type other than `vector`.
 
 ## Still broken or carried over
 
-`app.py`, `webui/src/main.js`, `webui/style.css` and `run.bat` have no functional changes in
-v2.6.1.
-
-1. **`returns` is still not validated for C++**, even though the error text mentions it.
-2. **`951` stdout matching is exact and does not ignore trailing spaces.** Expected strings
+1. **`951` stdout matching is exact and does not ignore trailing spaces.** Expected strings
    have no trailing spaces; a common `"* "`-per-cell solution emits one and fails. Only
    trailing `\r\n` is stripped before comparison.
-3. **The full editor still needs the network on every launch.** CodeMirror is imported
-   from `https://esm.sh`; offline users get the plain textarea without highlighting,
-   autocomplete, folding or Tab indentation.
-4. **`webui/package.json` is dead weight.** Its CodeMirror dependencies and esbuild script
-   are unused at runtime.
-5. **The editor upgrade still replays unconditionally** after `cmReady`, discarding cursor
-   position and undo history and potentially showing the fallback toast twice.
-6. **`os.chdir(ROOT)` is process-wide.** Harmless today because the judge uses temporary
-   directories and absolute problem paths, but fragile for future relative paths.
-7. **`run_test_count` can display values below 2.** The backend clamps to 2–4 and then
-   takes `min(…, visible_count)`, so a problem with one visible test shows
-   `Run: 1 sample`.
-8. **`__pycache__/` is untracked noise.** Importing `app.py` creates it and there is still
-   no root `.gitignore`.
-9. **Markdown image/link URLs cannot contain `)` or titles** (`![a](pic.png "caption")`),
+2. **`webui/package.json` is now used only to rebuild the bundled editor.** It is not
+   needed at runtime.
+3. **Markdown image/link URLs cannot contain `)` or titles** (`![a](pic.png "caption")`),
    local images are re-read and base64-encoded on every load with no size cap or cache,
    and remote images are fetched directly by the WebView.
-10. **Submit still runs the whole suite**, one C++ process per case. `838` and `951` are
-    faster now thanks to the smaller `838` file, but there is no batching.
 
 ## Still open from earlier versions
 
-- String id sorting (`1000` would sort before `213`), MSYS2 path coverage, `py`/`python`
-  interpreter mismatch, ignored runner exit codes, no sandbox, top-level-only `unordered`,
-  and `user_solution.*` scratch files.
+- MSYS2 path coverage, `py`/`python` interpreter mismatch, and `user_solution.*` scratch
+  files.
 - `run.bat` only checks that `webview` imports; it does not enforce
   `pywebview>=5.4,<7`.
 - `build_exe.bat` is still a placeholder; there is no standalone EXE build.
-- `difficulty: "Basic"` still gets the default green pill (CSS defines only `medium` and
-  `hard`).
-- `list_problems` rescans the folder on every call, so indices can shift if folders change
-  while the app is open.
-- No root `.gitignore` for `__pycache__/`, `user_solution.*` or `webui/dist/`.
-- `README_LOCALCODE.txt` still contains stale v2.1 lines about the "first-time editor
-  build" and `webui\dist`.
+- No root `.gitignore` for `__pycache__/`, `user_solution.*` or the generated draft file.
 
 ## Requirements (Windows)
 
@@ -192,9 +200,11 @@ v2.6.1.
 - **Microsoft Edge WebView2 Runtime** — normally present on current Windows; install the
   Evergreen Runtime if LocalCode reports that the webview could not start.
 - **g++** (MSYS2 UCRT64 recommended) — only for C++ judging.
-- **Node.js LTS** — only for JavaScript judging (not required to launch).
-- **Internet access** for the full CodeMirror editor. Without it, LocalCode uses the
-  textarea fallback. Local problem images still work offline.
+- **Node.js LTS** — only for JavaScript judging (not required to launch or rebuild the
+  bundled editor).
+- **No internet connection is required** for the full CodeMirror editor; the bundle ships
+  with the app. A textarea is used only if the bundled file is missing. Local problem
+  images still work offline.
 
 ## Quick start
 
@@ -215,26 +225,32 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-There is **no npm install and no build step**, and the UI is served by pywebview's local
-HTTP server rather than from `file://`.
+There is **no npm install and no build step** when running the app. CodeMirror is already
+bundled in `webui/vendor/codemirror.js`; `npm run build:editor` is only needed when changing
+the editor source. The UI is opened from an absolute `webui/index.html` path without
+changing the process working directory.
 
 ## Repository layout
 
 ```text
 LocalCode/
-  app.py                  # pywebview shell, HTTP-served UI, Run/Submit, resolve_image
-  engine.py               # judge: Python/JS runners, C++ codegen, compile & execute
+  app.py                  # pywebview shell, HTTP-served UI, drafts, Run/Submit, images
+  engine.py               # judge: Python/JS runners, C++ codegen, sandbox, parallel cases
   requirements.txt        # pywebview>=5.4,<7
   run.bat                 # Python check, optional Node warning, pywebview install, launch
   build_exe.bat           # placeholder (no EXE build)
+  .localcode_drafts.json  # persisted editor drafts (created on first save)
   README.md               # this file
-  README_LOCALCODE.txt    # plain-text 2.2 notes + v2.3–v2.6.1 sections
+  README_LOCALCODE.txt    # plain-text v2.6.1 notes
   README_GCC_FIX.txt      # MSYS2 GCC runtime-DLL note
   webui/
-    index.html            # app shell (LocalCode); image-preview modal; badge 2.6
+    index.html            # app shell (LocalCode); image-preview modal; badge 2.6.1
     style.css             # dark theme, rich-Markdown, image and preview styles
-    src/main.js           # UI logic, Markdown renderer, image resolution, CDN loader
-    package.json          # vestigial CodeMirror deps + unused esbuild script
+    src/main.js           # UI logic, Markdown renderer, image resolution, local editor loader
+    vendor/
+      codemirror-entry.js # source module for the bundled editor
+      codemirror.js       # generated offline CodeMirror bundle
+    package.json          # CodeMirror deps + build:editor script
     .gitignore            # node_modules/
   problems/
     001-two-sum/                  # 4 tests (2 hidden); Run uses 2
@@ -269,7 +285,7 @@ Required fields:
 
 | Field    | Meaning                                                        |
 | -------- | -------------------------------------------------------------- |
-| `id`     | Problem number/identifier (currently sorted as a string)       |
+| `id`     | Problem number/identifier (numeric ids sort by value)          |
 | `title`  | Title shown in the picker                                      |
 | `method` | Method name on the `Solution` class that the judge calls       |
 | `tests`  | Non-empty array of `{ "input": {...}, "expected": ... }` cases |
@@ -278,13 +294,13 @@ Optional fields:
 
 | Field            | Meaning                                                                       |
 | ---------------- | ----------------------------------------------------------------------------- |
-| `difficulty`     | `Easy`, `Medium` or `Hard`; `Basic` also appears and uses the default colour   |
-| `unordered`      | `true` → compare a top-level list result ignoring order                        |
+| `difficulty`     | `Easy`, `Medium`, `Hard`, or `Basic` (blue pill)                                |
+| `unordered`      | `true` → compare list results ignoring order, recursively                       |
 | `timeout`        | Per-case timeout in seconds (default `10`)                                     |
 | `output_mode`    | `"stdout"` → compare printed output; anything else compares the return value   |
 | `run_test_count` | Visible tests used by **Run**; clamped to **2–4**, default `3`                 |
 | `types`          | **Required for C++**: map of parameter name → type                             |
-| `returns`        | Documented for C++ but currently not validated                                 |
+| `returns`        | **Required for C++**: return type (`"void"` requires `"output_mode": "stdout"`) |
 
 A test can set `"hidden": true`; hidden cases run only on **Submit**.
 
@@ -311,9 +327,10 @@ Example:
 ### C++ types accepted in v2.6.1
 
 See the table in [“C++ type system expanded”](#c-type-system-expanded). Both the compact
-legacy form (`int[]`) and the standard C++ form (`vector<int>`, `std::vector<int>`) work,
-including nesting. `unsigned`, `const`, STL types other than `vector`, and `int []` with a
-space before `[]` are not supported and produce a clear error.
+legacy form (`int[]`) and standard forms (`int []`, `vector<int>`, `std::vector<int>`,
+`deque<int>`, `set<int>`, `unordered_set<string>`) work, including nesting. `unsigned`
+variants, `short`, `char`, `float`, `size_t` and matching reader/writer helpers are
+supported. `map` and `const` declarations are not supported and produce a clear error.
 
 ### Starter code and includes
 
@@ -363,19 +380,20 @@ Local image rules:
 
 Every Run/Submit:
 
-1. Saves the editor draft in memory and writes `user_solution.<ext>` into the problem
-   folder.
+1. Saves the editor draft in memory and to `.localcode_drafts.json`, and writes
+   `user_solution.<ext>` into the problem folder.
 2. Chooses the test list: Run = first `run_test_count` visible tests; Submit = all tests.
 3. Calls `engine.judge(...)` with the selected language and test list.
-4. Runs everything in a fresh temporary directory and returns per-case results.
+4. Runs everything in a fresh temporary directory and returns per-case results. User code
+   gets a restricted environment and, on Windows, a Job Object with process/memory limits.
 
 - **Python** — the solution is `exec`'d in a namespace that pre-imports `typing`,
   `collections`, `math`, `heapq`, `itertools`, `functools` and `bisect`, then
   `Solution().<method>(**input)` is called. `stdout` is captured per case.
 - **C++** — generates `main.cpp` (headers → user code → `main()`), compiles with
   `g++ -O2 -std=c++17` (120 s allowed), feeds each case's arguments on stdin and reads the
-  result from `result.json`. In `stdout` mode, `cout` is captured and written as a JSON
-  string.
+  result from `result.json`. Cases run in parallel with up to four workers, each in its own
+  directory. In `stdout` mode, `cout` is captured and written as a JSON string.
 - **JavaScript** — the file is wrapped with `new Function(...)`, `Solution` is
   instantiated per case, and `console.log` is captured.
 
@@ -393,39 +411,46 @@ spaces) must match exactly.
   section is gone.
 - **`951` expects no trailing spaces.** Build lines with a separator (`j ? " *" : "*"`)
   rather than appending `"* "`.
-- **Badge still says 2.6; plain-text title still says 2.2.**
-- **Full editor requires internet.** Without `esm.sh`, the textarea fallback is used.
-- **Submit can be slow** on `951` (100 cases) and `213` (344 cases), especially in C++.
-- **Drafts are memory-only.** Closing the app loses unsaved drafts; only
-  `user_solution.<ext>` is written to disk.
+- **C++ Submit is still bounded by compile time and CPU count.** Cases now run up to four
+  at a time, but very large suites are not instantaneous.
 - **`user_solution.*` files pollute the problem folders.**
 - **`run.bat` does not enforce `pywebview>=5.4`.** It only checks that `webview` imports.
 - **`build_exe.bat` is a placeholder.** Use `run.bat` from the source folder.
-- **No root `.gitignore`** for generated files.
+- **No root `.gitignore`** for generated files, including the draft file.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
-| C++: `Runner failed: Unsupported C++ input type '…'` | `ctype()` does not know that type. Use `int`, `string`, `int[]`, `vector<int>` or another supported form. |
+| C++: `Unsupported C++ input type '…'` | `ctype()` does not know that type. Use `int`, `string`, `int[]`, `vector<int>`, `deque<int>` or another supported form. |
 | C++: something still "has not been declared" | Headers are now emitted first, so this should be gone. If it persists, check for a local name clash with `ws`, `rd` or `pr`, or an unsupported type in `types`. |
 | `951`: Wrong Answer on a visually correct pattern | The expected strings have no trailing spaces; avoid emitting `"* "` at the end of each line. |
 | An image in the statement shows `Image unavailable: …` | The file is missing, is outside the problem folder, or is not an `image/*` type. |
 | `951`'s reference PNG is not displayed | It is only mentioned as inline code. Add `![Pattern reference](attached-pattern-reference.png)` to `problem.md`. |
-| Run shows only 2–4 cases | Expected: Run uses sample tests. Use Submit for the full suite. |
+| Run shows `1 sample` | Expected when a problem has one visible test. Use Submit for the full suite. |
 | C++: compile error about a missing include | Should no longer happen in v2.6.1. Verify you are on this branch and that `engine.CPP_HELP` precedes your code. |
-| Editor is a plain textarea | CodeMirror could not be fetched from `esm.sh` (offline, proxy, DNS). The toast explains the reason. |
+| Editor is a plain textarea | `webui/vendor/codemirror.js` is missing or failed to load; reinstall the app to restore the full editor. |
 | "LocalCode could not start" / webview initialization error | Install or repair the Microsoft Edge WebView2 Evergreen Runtime. |
 | Window stays blank | Check that `webui/index.html` exists, then run `python app.py` in a terminal for the traceback. |
 | `g++ was not found...` | Install MSYS2 UCRT64 GCC and add `C:\msys64\ucrt64\bin` to `PATH`. |
 | `cc1plus.exe - Entry Point Not Found` / `libgcc_s_seh-1.dll` missing | MSYS2 runtime DLLs are not on the child-process `PATH`; only default `C:\msys64` locations are auto-added. See `README_GCC_FIX.txt`. |
 | `Node.js not found...` warning at launch | Harmless for Python/C++. Install Node.js LTS only if you need JavaScript judging. |
-| `tests.json needs a "types" map ... for C++` | Add `types` (and ideally `returns`) for that problem. |
+| `tests.json needs a "types" map ... for C++` | Add `types` for that problem. |
+| `tests.json needs a "returns" field for C++` | Add `returns` (e.g. `"int"`, `"int[]"`, or `"void"` with `"output_mode": "stdout"`). |
+| `Invalid C++ "returns" declaration ...` | The declared return type is unsupported; use `int`, `string`, `int[]`, `vector<int>`, etc. |
+| `Runner exited with code ...` / `out.json missing` | The Python/JavaScript runner crashed; the error includes stderr/stdout captured from the runner. |
+| New problems do not appear in the picker | Click the refresh button to rescan `problems/`. |
+| Drafts disappeared after a reinstall | Drafts are stored in `.localcode_drafts.json` beside `app.py`; preserve that file when copying the app. |
 | `Python 3 was not found.` | Python is not installed or `py`/`python` is not on `PATH`. |
 | EXE build fails | Expected: `build_exe.bat` is a placeholder. Use `run.bat`. |
 
 ## Version history (this branch)
 
+- **v2.6.1 (workspace fixes)** — validates C++ `returns`, bundles CodeMirror offline,
+  keeps editor drafts across restarts, surfaces runner failures, runs C++ cases in parallel
+  under a restricted environment/job object, refreshes the problem list on demand, sorts
+  numeric ids by value, fixes Run sample wording/Basic pill styling, and updates the
+  version labels to 2.6.1.
 - **v2.6.1** — fixes the C++ judge: `ctype()` accepts `vector<int>`, `std::vector<int>` and
   nested vector forms, unsupported types raise a readable error, and `CPP_HELP` is emitted
   before user code so `vector`/`cout` no longer need manual includes. Adds
@@ -441,8 +466,8 @@ spaces) must match exactly.
   page to `SRKCode`.
 - **v2.4** — fixes CodeMirror `indentOnInput` registration and adds a resilient textarea
   fallback for CDN and constructor failures.
-- **v2.3** — removes the `Window` reference from the JS API, serves the UI through
-  pywebview's local HTTP server, and loads problems before the CodeMirror CDN.
+- **v2.3** — removes the `Window` reference from the JS API, opens the local UI through
+  pywebview, and loads problems before the CodeMirror CDN.
 - **v2.2** — removes the npm/esbuild build step, loads `src/main.js` directly, restores
   CDN CodeMirror with a textarea fallback, and makes Node.js optional at launch.
 - **v2.1** — locally bundled CodeMirror via esbuild, automated first-run build, Node.js

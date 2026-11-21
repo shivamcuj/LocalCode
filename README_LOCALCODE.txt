@@ -1,12 +1,12 @@
-LOCALCODE WINDOWS 2.2 - CODEMIRROR 6
-===================================
+LOCALCODE WINDOWS 2.6.1 - CODEMIRROR 6 (BUNDLED)
+================================================
 
 START
 1. Extract the complete ZIP into a normal folder.
 2. Make sure Python 3 and Node.js LTS are installed and available in PATH.
 3. Double-click run.bat.
 4. run.bat installs pywebview if needed and starts LocalCode. There is no npm build step and no missing dist/app.js dependency.
-5. CodeMirror 6 modules are loaded from esm.sh when internet is available. If they cannot load, the application still opens with a built-in text editor so problem loading, Run, and Submit remain usable.
+5. CodeMirror 6 is bundled in webui/vendor/codemirror.js and loads locally, so the full editor works offline. A textarea is used only if that bundled file is missing or fails to load.
 
 EDITOR FEATURES
 - CodeMirror 6 editor with Python, C++, and JavaScript syntax highlighting.
@@ -14,7 +14,7 @@ EDITOR FEATURES
 - Automatic indentation and reindentation on input.
 - Tab inserts a 4-space indent; Shift+Tab outdents selected lines.
 - Autocomplete support (Ctrl+Space), search, code folding, undo/redo, and multiple selections.
-- Separate saved drafts for every problem and language during the app session.
+- Separate saved drafts for every problem and language; drafts persist across restarts.
 
 USAGE
 - Select a problem from the top dropdown.
@@ -39,10 +39,10 @@ For print-output problems, set "output_mode": "stdout". C++ output is captured f
 
 REQUIREMENTS
 - Python 3
-- Node.js LTS (used for JavaScript judging and the first-time editor build)
+- Node.js LTS (used for JavaScript judging; only needed to rebuild the bundled editor)
 - MSYS2 UCRT64 GCC or compatible g++ for C++
 - Microsoft Edge WebView2 Runtime for the desktop window (normally present on modern Windows; install the Evergreen Runtime if prompted)
-- Internet connection for CodeMirror 6 editor features; offline fallback editor is available
+- No internet connection is needed for the bundled CodeMirror 6 editor; a plain textarea is a last-resort fallback if the bundle is missing.
 
 MSYS2 GCC
 The launcher adds no compiler directories globally. The judge automatically adds the standard C:\msys64\ucrt64\bin and C:\msys64\usr\bin directories to the compiler process PATH when they exist.
@@ -50,7 +50,7 @@ The launcher adds no compiler directories globally. The judge automatically adds
 
 Troubleshooting update (v2.1):
 - The editor waits for the pywebview JavaScript bridge and also checks for it if the ready event happened before the editor bundle finished loading.
-- If the editor does not load, close LocalCode and run run.bat again. The launcher verifies that webui\dist\app.js was built.
+- If the editor does not load, close LocalCode and run run.bat again. Verify that webui\vendor\codemirror.js is present.
 - Starter code is loaded from the selected problem folder's starter.py, starter.cpp, or starter.js file.
 - Run tests the visible cases; Submit tests all cases. Ctrl+Enter runs and Ctrl+Shift+Enter submits.
 
@@ -59,9 +59,9 @@ Startup fix notes (v2.3)
 -----------------------
 - The pywebview Window object is no longer attached to the JavaScript API object.
   This avoids recursive inspection of native Windows accessibility properties.
-- The UI is served using pywebview's local HTTP server instead of file://.
-- Problem statements and starter code load before optional CodeMirror CDN imports
-  finish. If the network is unavailable, the fallback editor remains usable.
+- The UI opens from an absolute webui\index.html path; the app no longer changes its working directory.
+- Problem statements and starter code load immediately; the locally bundled CodeMirror
+  editor is available without a network connection.
 
 
 VERSION 2.4 FIX
@@ -90,5 +90,20 @@ RICH MARKDOWN + IMAGE PREVIEW (v2.6)
 - Click any rendered image to open a larger preview. Press Escape or click outside the image to close it.
 - Local image paths are restricted to the selected problem folder; absolute paths and ../ traversal are rejected. Raw HTML in problem.md is escaped rather than executed.
 - If a local image is mentioned only as inline code (for example `attached-pattern-reference.png`), it will not display automatically. Add a Markdown image line such as ![Pattern reference](attached-pattern-reference.png).
-C++ tests.json type declarations support int, long, double, bool, string, int[], vector<int>, std::vector<int>, and nested vector forms such as vector<vector<int>>.
-The C++ judge now places standard headers before submitted code, so vector-based starter signatures compile without requiring users to add includes.
+C++ tests.json type declarations support int, long, double, bool, string, unsigned variants, short, char, float, int[], spaced arrays (int []), vector<int>, deque<int>, list<int>, set<int>, unordered_set<int>, std:: forms, and nested combinations such as vector<deque<int>>.
+C++ requires a returns declaration; use "void" with "output_mode": "stdout" for print-only problems. The judge now places standard headers before submitted code, so vector-based starter signatures compile without requiring users to add includes.
+
+
+VERSION 2.6.1 FIXES
+-------------------
+- C++ returns declarations are validated. Missing, unsupported, or void-without-stdout declarations show a clear error in the UI.
+- Submissions run with credential-like environment variables removed and, on Windows, a job object that limits processes/memory and cleans up leftover children.
+- Runner failures are reported: non-zero JS/Python runner exit codes and missing out.json now show errors instead of empty results.
+- C++ test cases run in parallel (up to 4 workers) while keeping separate case directories and timeouts, so Submit is faster.
+- CodeMirror 6 is bundled locally in webui/vendor/codemirror.js; the full editor works offline. The CDN import is only a fallback.
+- Upgrading the editor no longer replays after a failed load, preserving the textarea's cursor/undo history.
+- The refresh button now rescans the problems folder. Problem ids are sorted numerically.
+- Run sample counts are worded correctly and the Basic difficulty pill uses a distinct blue colour.
+- Drafts persist in .localcode_drafts.json across restarts.
+- os.chdir(ROOT) was removed; page paths are absolute.
+- The unordered comparison option now normalizes nested lists recursively.

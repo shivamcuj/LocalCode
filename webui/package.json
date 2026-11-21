@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js"
+    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js",
+    "build:editor": "esbuild vendor/codemirror-entry.js --bundle --format=iife --target=es2020 --minify --outfile=vendor/codemirror.js"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.2",

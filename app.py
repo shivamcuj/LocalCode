@@ -11,6 +11,7 @@ import engine
 
 ROOT = Path(getattr(__import__("sys"), "_MEIPASS", Path(__file__).resolve().parent))
 PROBLEMS_DIR = ROOT / "problems"
+DRAFTS_FILE = ROOT / ".localcode_drafts.json"
 LANGS = engine.LANGS
 
 
@@ -20,11 +21,49 @@ class LocalCodeAPI:
         # js_api exposes this object to JavaScript; exposing Window causes
         # pywebview to recursively inspect native AccessibilityObject.Bounds.
         self.problems = []
-        self.drafts = {}
+        self.warnings = []
+        self.drafts = self._load_drafts()
         self.lock = threading.Lock()
-        self.refresh_problems()
+        self._scan_problems()
 
-    def refresh_problems(self):
+    def _draft_key(self, problem_dir, language):
+        return (str(problem_dir), str(language))
+
+    def _load_drafts(self):
+        """Restore drafts saved from an earlier session, if the file is readable."""
+        try:
+            data = json.loads(DRAFTS_FILE.read_text(encoding="utf8"))
+            restored = {}
+            for key, code in data.items():
+                try:
+                    parts = json.loads(key)
+                    if isinstance(parts, list) and len(parts) == 2:
+                        restored[tuple(parts)] = str(code)
+                except (TypeError, ValueError):
+                    continue
+            return restored
+        except Exception:
+            return {}
+
+    def _persist_drafts(self):
+        """Write drafts atomically so a crash cannot leave a half-written file."""
+        try:
+            data = {json.dumps(list(key)): code for key, code in self.drafts.items()}
+            tmp = DRAFTS_FILE.with_name(DRAFTS_FILE.name + ".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf8")
+            tmp.replace(DRAFTS_FILE)
+        except Exception as exc:
+            print(f"Could not save drafts: {exc}")
+
+    @staticmethod
+    def _problem_sort_key(meta):
+        value = meta.get("id", "")
+        try:
+            return (0, int(value), "")
+        except (TypeError, ValueError):
+            return (1, 0, str(value))
+
+    def _scan_problems(self):
         found, errors = [], []
         if not PROBLEMS_DIR.is_dir():
             PROBLEMS_DIR.mkdir(parents=True, exist_ok=True)
@@ -50,17 +89,26 @@ class LocalCodeAPI:
                 found.append(meta)
             except Exception as exc:
                 errors.append(f"{folder.name}: {exc}")
-        self.problems = sorted(found, key=lambda m: str(m.get("id", "")))
+        self.problems = sorted(found, key=self._problem_sort_key)
+        self.warnings = errors
         return errors
 
-    def list_problems(self):
-        errors = self.refresh_problems()
+    def _problem_payload(self):
         return {
             "problems": [{"index": i, "id": p["id"], "title": p["title"],
                           "difficulty": p.get("difficulty", "")}
                          for i, p in enumerate(self.problems)],
-            "warnings": errors,
+            "warnings": list(self.warnings),
         }
+
+    def list_problems(self):
+        """Return the cached list; use refresh_problems() to rescan the folder."""
+        return self._problem_payload()
+
+    def refresh_problems(self):
+        """Rescan the problems folder (used by the UI refresh button)."""
+        self._scan_problems()
+        return self._problem_payload()
 
     def get_problem(self, index, language="python"):
         try:
@@ -70,7 +118,7 @@ class LocalCodeAPI:
             if language not in LANGS:
                 raise ValueError("Unsupported language")
             meta = self.problems[i]
-            key = (meta["dir"], language)
+            key = self._draft_key(meta["dir"], language)
             if key in self.drafts:
                 code = self.drafts[key]
             else:
@@ -126,7 +174,8 @@ class LocalCodeAPI:
             meta = self.problems[int(index)]
             if language not in LANGS:
                 raise ValueError("Unsupported language")
-            self.drafts[(meta["dir"], language)] = str(code)
+            self.drafts[self._draft_key(meta["dir"], language)] = str(code)
+            self._persist_drafts()
             return {"ok": True}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
@@ -137,7 +186,8 @@ class LocalCodeAPI:
             if language not in LANGS:
                 raise ValueError("Unsupported language")
             code = str(code)
-            self.drafts[(meta["dir"], language)] = code
+            self.drafts[self._draft_key(meta["dir"], language)] = code
+            self._persist_drafts()
             ext = LANGS[language][2]
             (Path(meta["dir"]) / f"user_solution.{ext}").write_text(code, encoding="utf8")
             # Run is a fast feedback loop: use only the first 2-4 non-hidden
@@ -201,10 +251,9 @@ class LocalCodeAPI:
 
 def main():
     api = LocalCodeAPI()
-    # Serve the local UI through pywebview's built-in HTTP server instead of
-    # file://. This avoids file-origin restrictions on ES modules used by CM6.
-    os.chdir(ROOT)
-    page = "webui/index.html"
+    # Use an absolute path instead of changing the process-wide working directory.
+    # All file access already uses absolute paths rooted at ROOT or in temp dirs.
+    page = str(ROOT / "webui" / "index.html")
     webview.create_window(
         "LocalCode", page, js_api=api, width=1450, height=900,
         min_size=(1050, 680), background_color="#17191f"
