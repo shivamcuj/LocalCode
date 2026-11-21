@@ -1,8 +1,11 @@
-// Load CodeMirror 6 directly as ES modules. This avoids a missing dist/app.js
-// build artifact being able to leave the entire desktop window blank.
-// If the CDN is unavailable, LocalCode falls back to a functional textarea.
+// CodeMirror 6 is bundled locally (vendor/codemirror.js, loaded by index.html),
+// so the full editor works offline. The CDN import remains as a fallback for
+// installations where the bundled file is missing, and a textarea is the last
+// resort. No import is awaited before the problem list is displayed.
 let cm = null;
 const cmReady = (async () => {
+  const local = window.LocalCodeCodeMirror?.cm;
+  if (local) { cm = local; return; }
   try {
     const imports = Promise.all([
       import("https://esm.sh/codemirror@6.0.2"),
@@ -29,6 +32,7 @@ const cmReady = (async () => {
 })();
 
 let editor = null;
+let cmAttempted = false;
 let selectedProblem = 0;
 let selectedLanguage = "python";
 let currentMeta = null;
@@ -186,10 +190,11 @@ function createEditor(doc, language) {
   const host = $("editor");
   host.innerHTML = "";
   if (!cm) {
-    createFallbackEditor(doc, "Check your internet connection to enable CodeMirror features.");
+    createFallbackEditor(doc, "vendor/codemirror.js is missing or failed to load; reinstall the app to restore the full editor.");
     return;
   }
   try {
+    cmAttempted = true;
     editor = new cm.EditorView({
       doc,
       parent: host,
@@ -243,7 +248,8 @@ async function loadProblem(index, keepLanguage = true) {
     $("difficulty").className = `difficulty ${(data.difficulty || "").toLowerCase()}`;
     $("statement").innerHTML = await markdownToHtml(data.statement, selectedProblem);
     wireImagePreviews();
-    $("caseCount").textContent = `Run: ${data.run_test_count} sample · Submit: ${data.total_count} total tests`;
+    const sampleCount = data.run_test_count;
+    $("caseCount").textContent = `Run: ${sampleCount} sample${sampleCount === 1 ? "" : "s"} · Submit: ${data.total_count} total tests`;
     createEditor(data.code || "", language);
     clearResults();
   } catch (error) {
@@ -370,7 +376,12 @@ async function initializeLocalCode() {
   });
   $("runBtn").addEventListener("click", () => runCode(false));
   $("submitBtn").addEventListener("click", () => runCode(true));
-  $("refreshBtn").addEventListener("click", loadProblemList);
+  $("refreshBtn").addEventListener("click", async () => {
+    try {
+      await window.pywebview.api.refresh_problems();
+      await loadProblemList();
+    } catch (error) { showToast(`Refresh failed: ${error?.message || error}`, true); }
+  });
   $("imagePreviewClose").addEventListener("click", closeImagePreview);
   $("imagePreview").addEventListener("click", e => { if (e.target === $("imagePreview")) closeImagePreview(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeImagePreview(); });
@@ -389,7 +400,9 @@ async function initializeLocalCode() {
   // If CM6 finishes loading after the fallback textarea has been displayed,
   // upgrade the editor in-place while preserving the user's current code.
   await cmReady;
-  if (cm && editor && currentMeta) {
+  // Only upgrade once. If CodeMirror was already tried (and failed), replaying
+  // would discard the user's cursor/undo history and show the fallback toast twice.
+  if (cm && !cmAttempted && editor && currentMeta) {
     const currentCode = editor.state.doc.toString();
     createEditor(currentCode, selectedLanguage);
   }
